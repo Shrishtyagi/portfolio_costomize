@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Shrish Tyagi | Portfolio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow elements -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="ambient-glow glow-3"></div>
+
+  <!-- Owner Floating Action Button -->
+  <button id="ownerBtn" class="owner-floating-btn" aria-label="Owner Access" title="Admin Portal">
+    <i class="fa-solid fa-shield-halved"></i>
+    <span class="btn-text">Owner Mode</span>
+  </button>
+
+  <!-- Sticky Responsive Header -->
+  <header class="navbar-wrapper">
+    <nav class="navbar">
+      <a href="#about" class="logo">
+        Shrish<span class="accent-dot">.</span>
+      </a>
+
+      <!-- Desktop Nav Links -->
+      <div class="nav-links" id="navLinks">
+        <a href="#about" class="nav-link">About</a>
+        <a href="#experience" class="nav-link">Experience</a>
+        <a href="#projects" class="nav-link">Projects</a>
+        <a href="#certificates" class="nav-link">Certificates</a>
+        <a href="#education" class="nav-link">Education</a>
+        <a href="#skills" class="nav-link">Skills</a>
+        <a href="#contact" class="nav-link nav-contact-btn">Get In Touch</a>
+      </div>
+
+      <!-- Mobile Hamburger Toggle -->
+      <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation menu">
+        <span class="bar"></span>
+        <span class="bar"></span>
+        <span class="bar"></span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="page-container">
+    <!-- Hero Section -->
+    <section class="hero-section" id="about">
+      <div class="hero-wrapper">
+        <h1 class="hero-title">
+          Hi, I'm <span class="gradient-text">Shrish Tyagi</span>
+        </h1>
+
+        <p class="hero-description" id="heroTagline">
+          Full-Stack Web Developer & Data Analytics Enthusiast. Specializing in high-performance React architectures, Node.js micro-services, Power BI reporting, and AI integrations.
+        </p>
+
+        <!-- Admin Editable Bio Button -->
+        <button id="editTaglineBtn" class="btn btn-edit admin-only" style="margin-bottom: 24px; font-size: 0.8rem; padding: 6px 14px; width: fit-content;" onclick="openTaglineModal()">
+          <i class="fa-solid fa-pen-to-square"></i> Edit Bio
+        </button>
+
+        <!-- Dynamic Quick Contacts Bar (Below Bio) -->
+        <div class="quick-contact-bar" id="quickContactsBar">
+          <!-- Rendered dynamically from MongoDB via JS -->
+        </div>
+
+        <div class="hero-cta-group" style="margin-top: 28px;">
+          <a href="#contact" class="btn primary-btn">
+            <span>Send Message</span>
+            <i class="fa-solid fa-arrow-right"></i>
+          </a>
+          <a href="#experience" class="btn secondary-btn">
+            <span>Explore Work</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Work Experience Section -->
+    <section class="section" id="experience">
+      <div class="section-header">
+        <div>
+          <span class="section-subtitle">Career Roadmap</span>
+          <h2 class="section-title">Work Experience</h2>
+        </div>
+        <button class="btn admin-add-btn admin-only" onclick="openAddCardModal('experience')">
+          <i class="fa-solid fa-plus"></i> Add Experience
+        </button>
+      </div>
+      <div class="card-grid" id="experienceGrid"></div>
+    </section>
+
+    <!-- Projects Section -->
+    <section class="section" id="projects">
+      <div class="section-header">
+        <div>
+          <span class="section-subtitle">Selected Engineering</span>
+          <h2 class="section-title">Featured Projects</h2>
+        </div>
+        <button class="btn admin-add-btn admin-only" onclick="openAddCardModal('projects')">
+          <i class="fa-solid fa-plus"></i> Add Project
+        </button>
+      </div>
+      <div class="card-grid" id="projectsGrid"></div>
+    </section>
+
+    <!-- Certifications Section -->
+    <section class="section" id="certificates">
+      <div class="section-header">
+        <div>
+          <span class="section-subtitle">Credentials & Courses</span>
+          <h2 class="section-title">Achievements & Certifications</h2>
+        </div>
+        <button class="btn admin-add-btn admin-only" onclick="openAddCardModal('certificates')">
+          <i class="fa-solid fa-plus"></i> Add Certificate
+        </button>
+      </div>
+      <div class="card-grid" id="certificatesGrid"></div>
+    </section>
+
+    <!-- Education Section -->
+    <section class="section" id="education">
+      <div class="section-header">
+        <div>
+          <span class="section-subtitle">Academic Milestones</span>
+          <h2 class="section-title">Education</h2>
+        </div>
+        <button class="btn admin-add-btn admin-only" onclick="openAddCardModal('education')">
+          <i class="fa-solid fa-plus"></i> Add Education
+        </button>
+      </div>
+      <div class="card-grid" id="educationGrid"></div>
+    </section>
+
+    <!-- Technical Skills Section -->
+    <section class="section" id="skills">
+      <div class="section-header">
+        <div>
+          <span class="section-subtitle">Toolkit</span>
+          <h2 class="section-title">Technical Skills</h2>
+        </div>
+        <button class="btn admin-add-btn admin-only" onclick="openAddCardModal('skills')">
+          <i class="fa-solid fa-plus"></i> Add Skill Category
+        </button>
+      </div>
+      <div class="card-grid" id="skillsGrid"></div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="section" id="contact">
+      <div class="section-header text-center">
+        <div>
+          <span class="section-subtitle">Direct Transmission</span>
+          <h2 class="section-title">Let's Connect</h2>
+        </div>
+        <!-- Admin Inbox Viewer Button -->
+        <button class="btn btn-edit admin-only" style="margin-top: 10px; font-size: 0.85rem;" onclick="openMessagesModal()">
+          <i class="fa-solid fa-inbox"></i> View Received Messages (<span id="inboxCount">0</span>)
+        </button>
+      </div>
+
+      <div class="contact-card">
+        <form id="contactForm" class="contact-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="senderName">Your Name</label>
+              <input type="text" id="senderName" placeholder="e.g. John Doe" required autocomplete="name">
+            </div>
+            <div class="form-group">
+              <label for="senderEmail">Your Email</label>
+              <input type="email" id="senderEmail" placeholder="e.g. john@example.com" required autocomplete="email">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="senderMessage">Message</label>
+            <textarea id="senderMessage" rows="5" placeholder="Write your inquiry or proposal..." required></textarea>
+          </div>
+          <button type="submit" class="btn primary-btn submit-btn">
+            <span>Dispatch Message</span>
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- Admin Received Messages Modal -->
+  <div id="messagesModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-md">
+      <div class="modal-top">
+        <h3 class="modal-title"><i class="fa-solid fa-inbox"></i> Received Messages</h3>
+        <button class="modal-close" onclick="closeMessagesModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="messages-container" id="messagesContainer">
+        <!-- Rendered dynamically via JS -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn secondary-btn" onclick="closeMessagesModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Link Add/Edit Modal -->
+  <div id="contactLinkModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-top">
+        <h3 id="contactLinkModalTitle" class="modal-title">Contact Link</h3>
+        <button class="modal-close" onclick="closeContactLinkModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="contactLinkForm" class="edit-form">
+        <input type="hidden" id="editContactLinkId">
+        <div class="form-group">
+          <label for="editContactLabel">Label / Text (e.g. GitHub, Email, +91...)</label>
+          <input type="text" id="editContactLabel" required placeholder="e.g. GitHub">
+        </div>
+        <div class="form-group">
+          <label for="editContactUrl">Link / URL (e.g. https://..., mailto:..., tel:...)</label>
+          <input type="text" id="editContactUrl" required placeholder="e.g. https://github.com/...">
+        </div>
+        <div class="form-group">
+          <label for="editContactIcon">FontAwesome Icon Class</label>
+          <input type="text" id="editContactIcon" required placeholder="e.g. fa-brands fa-github">
+          <small style="color: var(--text-muted); font-size: 0.75rem;">
+            Common icons: <code>fa-solid fa-envelope</code>, <code>fa-solid fa-phone</code>, <code>fa-brands fa-github</code>, <code>fa-brands fa-linkedin-in</code>, <code>fa-solid fa-globe</code>
+          </small>
+        </div>
+        <div class="modal-footer modal-footer-split">
+          <button type="button" class="btn secondary-btn" onclick="closeContactLinkModal()">Cancel</button>
+          <button type="submit" class="btn primary-btn">Save Link</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bio / Tagline Edit Modal -->
+  <div id="taglineEditModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-top">
+        <h3 class="modal-title">Edit Bio / Tagline</h3>
+        <button class="modal-close" onclick="closeTaglineModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="taglineEditForm" class="edit-form">
+        <div class="form-group">
+          <label for="editTaglineInput">Hero Bio</label>
+          <textarea id="editTaglineInput" rows="4" required></textarea>
+        </div>
+        <div class="modal-footer modal-footer-split">
+          <button type="button" class="btn secondary-btn" onclick="closeTaglineModal()">Cancel</button>
+          <button type="submit" class="btn primary-btn">Save Bio</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- PDF View & Download Modal -->
+  <div id="pdfModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-top">
+        <h3 id="pdfModalTitle" class="modal-title">Document Preview</h3>
+        <button class="modal-close" onclick="closePdfModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body-pdf">
+        <iframe id="pdfFrame" src="" title="Document Preview"></iframe>
+      </div>
+      <div class="modal-footer">
+        <a id="pdfDownloadLink" class="btn primary-btn" href="" download>
+          <i class="fa-solid fa-download"></i> Download Document
+        </a>
+        <button class="btn secondary-btn" onclick="closePdfModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Project Media Gallery Modal -->
+  <div id="galleryModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-gallery">
+      <div class="modal-top">
+        <div class="gallery-title-group">
+          <span class="gallery-badge"><i class="fa-solid fa-photo-film"></i> Showcase</span>
+          <h3 id="galleryModalTitle" class="modal-title">Project Gallery</h3>
+        </div>
+        <button class="modal-close" onclick="closeGalleryModal()" aria-label="Close modal">&times;</button>
+      </div>
+      
+      <!-- Primary Viewer Screen -->
+      <div class="gallery-viewer-screen" id="galleryViewerScreen"></div>
+
+      <!-- Thumbnail Carousel Strip -->
+      <div class="gallery-thumbnails-wrapper">
+        <span class="thumbnails-label">Media Clips & Screenshots:</span>
+        <div class="gallery-thumbnails" id="galleryThumbnails"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Verification Modal -->
+  <div id="adminAuthModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-top">
+        <h3 class="modal-title">Owner Verification</h3>
+        <button class="modal-close" onclick="closeAdminModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <p class="modal-description">Enter your owner password to activate content modification tools.</p>
+      <div class="form-group">
+        <input type="password" id="adminPasswordInput" placeholder="Password" autocomplete="current-password">
+      </div>
+      <div class="modal-footer modal-footer-split">
+        <button class="btn secondary-btn" onclick="closeAdminModal()">Cancel</button>
+        <button class="btn primary-btn" onclick="authenticateAdmin()">Verify</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit / Add Card Modal -->
+  <div id="cardEditModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-md">
+      <div class="modal-top">
+        <h3 id="cardModalTitle" class="modal-title">Edit Card</h3>
+        <button class="modal-close" onclick="closeEditModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <form id="cardEditForm" class="edit-form">
+        <input type="hidden" id="editCardId">
+        <input type="hidden" id="editCardSection">
+
+        <!-- Title Field (Always Visible) -->
+        <div class="form-group" id="groupTitle">
+          <label>Title</label>
+          <input type="text" id="editTitle" placeholder="e.g. Programming Languages" required>
+        </div>
+
+        <!-- FontAwesome Icon Class (Visible for Technical Skills) -->
+        <div class="form-group" id="groupIcon">
+          <label for="editIcon">FontAwesome Icon Class (e.g. fa-solid fa-code)</label>
+          <input type="text" id="editIcon" placeholder="e.g. fa-solid fa-code">
+          <small style="color: var(--text-muted); font-size: 0.75rem;">
+            Popular skill icons: <code>fa-solid fa-code</code>, <code>fa-solid fa-screwdriver-wrench</code>, <code>fa-solid fa-database</code>, <code>fa-solid fa-layer-group</code>, <code>fa-solid fa-terminal</code>
+          </small>
+        </div>
+
+        <!-- Tags Field (Skills & Categories) -->
+        <div class="form-group" id="groupTags">
+          <label>Tags / Skills (Comma separated)</label>
+          <input type="text" id="editTags" placeholder="e.g. Python, JavaScript, React, Node.js">
+        </div>
+
+        <!-- Subtitle Field -->
+        <div class="form-group" id="groupSubtitle">
+          <label>Subtitle / Role</label>
+          <input type="text" id="editSubtitle" placeholder="e.g. Full-Stack Developer">
+        </div>
+
+        <!-- Period / Duration Field -->
+        <div class="form-group" id="groupPeriod">
+          <label>Duration / Period</label>
+          <input type="text" id="editPeriod" placeholder="e.g. July 2025 - Dec 2025">
+        </div>
+
+        <!-- Bullet Points Field -->
+        <div class="form-group" id="groupDescription">
+          <label>Bullet Points (Separate with '|')</label>
+          <textarea id="editDescription" rows="3" placeholder="Point 1 | Point 2"></textarea>
+        </div>
+
+        <!-- Project Exclusive: Gallery Media Inputs -->
+        <div class="form-group" id="galleryFieldGroup">
+          <label>Gallery Media URLs / Clips (Separate with comma or new line)</label>
+          <textarea id="editGallery" rows="3" placeholder="e.g. /uploads/clip1.mp4, /uploads/screen1.png, https://..."></textarea>
+          <small style="color: var(--text-muted); font-size: 0.75rem;">Supports: .mp4, .webm, YouTube links, and images (.jpg, .png, .webp)</small>
+        </div>
+
+        <!-- Non-Project Fields: Certificate & LOR -->
+        <div class="form-group" id="certFieldGroup">
+          <label>Certificate PDF Link (e.g., /uploads/cert.pdf)</label>
+          <input type="text" id="editCertPdf">
+        </div>
+        <div class="form-group" id="lorFieldGroup">
+          <label>Offer Letter / LOR Link (e.g., /uploads/lor.pdf)</label>
+          <input type="text" id="editLorPdf">
+        </div>
+
+        <div class="modal-footer modal-footer-split">
+          <button type="button" class="btn secondary-btn" onclick="closeEditModal()">Cancel</button>
+          <button type="submit" class="btn primary-btn">Save Card</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
