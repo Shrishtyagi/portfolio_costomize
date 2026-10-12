@@ -22,16 +22,12 @@ document.addEventListener('DOMContentLoaded', () => {
           checkAdminState();
         }
       } else {
-        const authModal = document.getElementById('adminAuthModal');
-        if (authModal) {
-          authModal.classList.add('show-modal');
-          authModal.style.display = 'flex';
-        }
+        openAdminModal();
       }
     });
   }
 
-  // Contact Form Submission (Records to MongoDB & notifies backend)
+  // Contact Form Submission
   const contactForm = document.getElementById('contactForm');
   if (contactForm) {
     contactForm.addEventListener('submit', async (e) => {
@@ -56,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const data = await res.json();
         if (data.success) {
-          alert("Thank you! Your message has been sent and recorded for Shrish Tyagi.");
+          alert("Thank you! Your message has been sent and recorded.");
           contactForm.reset();
           if (adminToken) loadMessages();
         } else {
@@ -76,6 +72,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (taglineEditForm) {
     taglineEditForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!ensureAdminUnlocked()) return;
+
       const newTagline = document.getElementById('editTaglineInput').value.trim();
 
       try {
@@ -93,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
           closeTaglineModal();
           alert("Bio updated successfully!");
         } else {
-          alert("Failed to update bio. Authorization error.");
+          handleAuthFailure(res);
         }
       } catch (err) {
         console.error(err);
@@ -107,6 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (contactLinkForm) {
     contactLinkForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!ensureAdminUnlocked()) return;
+
       const id = document.getElementById('editContactLinkId').value;
       const payload = {
         label: document.getElementById('editContactLabel').value.trim(),
@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
           await loadContacts();
           alert("Contact link saved successfully!");
         } else {
-          alert("Failed to save contact link. Authorization error.");
+          handleAuthFailure(res);
         }
       } catch (err) {
         console.error(err);
@@ -146,6 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (cardEditForm) {
     cardEditForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!ensureAdminUnlocked()) return;
+
       const id = document.getElementById('editCardId').value;
       const section = document.getElementById('editCardSection').value;
       const rawGallery = document.getElementById('editGallery').value;
@@ -191,8 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (res.ok) {
           closeEditModal();
           await loadCards();
+          alert("Card saved successfully!");
         } else {
-          alert("Failed to save changes. Authorization error.");
+          handleAuthFailure(res);
         }
       } catch (err) {
         console.error(err);
@@ -208,6 +211,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+/* Auth Guard Helpers */
+function ensureAdminUnlocked() {
+  if (!adminToken) {
+    alert("Owner Mode is locked. Please unlock it first.");
+    openAdminModal();
+    return false;
+  }
+  return true;
+}
+
+function handleAuthFailure(response) {
+  if (response.status === 403 || response.status === 401) {
+    alert("Session expired or unauthorized. Please re-enter your Owner Password.");
+    adminToken = null;
+    sessionStorage.removeItem('adminToken');
+    checkAdminState();
+    openAdminModal();
+  } else {
+    alert("Operation failed with status: " + response.status);
+  }
+}
 
 /* Mobile Drawer */
 function initMobileNav() {
@@ -229,7 +254,7 @@ function initMobileNav() {
   }
 }
 
-/* Load Bio / Tagline from Backend */
+/* Load Bio / Tagline */
 async function loadProfile() {
   try {
     const res = await fetch('/api/profile');
@@ -243,7 +268,7 @@ async function loadProfile() {
   }
 }
 
-/* Load and Render Contact Links */
+/* Load Contact Links */
 async function loadContacts() {
   try {
     const res = await fetch('/api/contacts');
@@ -288,7 +313,7 @@ function renderContacts() {
   container.appendChild(addBtn);
 }
 
-/* Contact Links Modal Controls */
+/* Contact Link Modal Controls */
 function openAddContactLinkModal() {
   document.getElementById('contactLinkModalTitle').innerText = 'Add Contact Link';
   document.getElementById('editContactLinkId').value = '';
@@ -323,6 +348,7 @@ function closeContactLinkModal() {
 }
 
 async function deleteContactLink(id) {
+  if (!ensureAdminUnlocked()) return;
   if (!confirm("Are you sure you want to remove this contact link?")) return;
   try {
     const res = await fetch(`/api/contacts/${id}`, {
@@ -332,25 +358,25 @@ async function deleteContactLink(id) {
     if (res.ok) {
       await loadContacts();
     } else {
-      alert("Failed to delete contact link.");
+      handleAuthFailure(res);
     }
   } catch (err) {
     console.error(err);
   }
 }
 
-/* ==========================================================================
-   ADMIN MESSAGES INBOX CONTROLS
-   ========================================================================== */
+/* Messages Inbox Controls */
 async function loadMessages() {
   if (!adminToken) return;
   try {
     const res = await fetch('/api/messages', {
       headers: { 'Authorization': adminToken }
     });
-    receivedMessages = await res.json();
-    const countEl = document.getElementById('inboxCount');
-    if (countEl) countEl.innerText = receivedMessages.length || 0;
+    if (res.ok) {
+      receivedMessages = await res.json();
+      const countEl = document.getElementById('inboxCount');
+      if (countEl) countEl.innerText = receivedMessages.length || 0;
+    }
   } catch (err) {
     console.error("Error loading messages:", err);
   }
@@ -400,6 +426,7 @@ function closeMessagesModal() {
 }
 
 async function deleteMessage(id) {
+  if (!ensureAdminUnlocked()) return;
   if (!confirm("Are you sure you want to delete this message?")) return;
   try {
     const res = await fetch(`/api/messages/${id}`, {
@@ -410,14 +437,14 @@ async function deleteMessage(id) {
       await loadMessages();
       openMessagesModal();
     } else {
-      alert("Failed to delete message.");
+      handleAuthFailure(res);
     }
   } catch (err) {
     console.error(err);
   }
 }
 
-/* Load Cards from Backend */
+/* Load Cards */
 async function loadCards() {
   try {
     const res = await fetch('/api/cards');
@@ -435,7 +462,7 @@ function extractDriveFileId(url) {
   return match ? match[1] : null;
 }
 
-/* Media Detection (Drive, YouTube, Direct Video, Image) */
+/* Media Type Detection */
 function getMediaType(url) {
   if (!url) return 'image';
   const clean = url.trim().toLowerCase();
@@ -514,7 +541,7 @@ function renderCards() {
       return;
     }
 
-    // 2. Action Buttons Construction
+    // 2. Action Buttons
     const cardGallery = extractCardGallery(card);
     let actionsHtml = '';
 
@@ -579,7 +606,7 @@ function renderCards() {
   });
 }
 
-/* Tagline / Bio Modal Functions */
+/* Tagline / Bio Modal */
 function openTaglineModal() {
   const currentText = document.getElementById('heroTagline').innerText;
   document.getElementById('editTaglineInput').value = currentText;
@@ -596,7 +623,7 @@ function closeTaglineModal() {
   }
 }
 
-/* Gallery Modal Functions */
+/* Gallery Modal */
 function openGalleryModal(cardId) {
   const card = portfolioCards.find(c => String(c._id) === String(cardId));
   if (!card) return;
@@ -706,8 +733,16 @@ function closeAllModals() {
 }
 
 /* Owner Authentication */
+function openAdminModal() {
+  const authModal = document.getElementById('adminAuthModal');
+  if (authModal) {
+    authModal.classList.add('show-modal');
+    authModal.style.display = 'flex';
+  }
+}
+
 async function authenticateAdmin() {
-  const pass = document.getElementById('adminPasswordInput').value;
+  const pass = document.getElementById('adminPasswordInput').value.trim();
   try {
     const res = await fetch('/api/admin/verify', {
       method: 'POST',
@@ -722,9 +757,9 @@ async function authenticateAdmin() {
       checkAdminState();
       closeAdminModal();
       loadMessages();
-      alert("Owner mode unlocked! You can now edit bio, contact links, view received messages, and edit cards.");
+      alert("Owner mode unlocked! You can now edit cards, bio, and contacts.");
     } else {
-      alert("Incorrect password.");
+      alert("Incorrect password: " + (data.message || ""));
     }
   } catch (err) {
     alert("Authentication server unreachable.");
@@ -751,7 +786,7 @@ function checkAdminState() {
   }
 }
 
-/* PDF Modal (With Google Drive Auto-Conversion) */
+/* PDF Modal */
 function openPdfModal(pdfUrl, title) {
   const modal = document.getElementById('pdfModal');
   const titleEl = document.getElementById('pdfModalTitle');
@@ -872,6 +907,7 @@ function adjustModalFieldsForSection(section) {
 }
 
 function openAddCardModal(section) {
+  if (!ensureAdminUnlocked()) return;
   document.getElementById('cardModalTitle').innerText = section === 'skills' ? 'Add Skill Category' : `Add New ${section}`;
   document.getElementById('editCardId').value = '';
   document.getElementById('editCardSection').value = section;
@@ -886,6 +922,7 @@ function openAddCardModal(section) {
 }
 
 function openEditCardModal(id) {
+  if (!ensureAdminUnlocked()) return;
   const card = portfolioCards.find(c => String(c._id) === String(id));
   if (!card) return;
 
@@ -911,13 +948,18 @@ function openEditCardModal(id) {
 }
 
 async function deleteCard(id) {
+  if (!ensureAdminUnlocked()) return;
   if (!confirm("Are you sure you want to remove this card?")) return;
   try {
     const res = await fetch(`/api/cards/${id}`, {
       method: 'DELETE',
       headers: { 'Authorization': adminToken }
     });
-    if (res.ok) loadCards();
+    if (res.ok) {
+      loadCards();
+    } else {
+      handleAuthFailure(res);
+    }
   } catch (err) {
     console.error(err);
   }
