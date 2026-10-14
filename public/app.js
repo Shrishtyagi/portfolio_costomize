@@ -1,15 +1,39 @@
 let adminToken = sessionStorage.getItem('adminToken') || null;
+let currentPalette = 'cyan';
+let currentAnimation = 'octaSphere'; // 'octaSphere', 'cyberTorus', 'quantumWave', 'hyperCube', 'dnaHelix', 'orbitalRings'
+let userTheme = localStorage.getItem('userTheme') || 'dark';
+
 let portfolioCards = [];
 let contactLinks = [];
 let receivedMessages = [];
 let activeGalleryMediaList = [];
 
+// Three.js Core Variables
+let threeScene, threeCamera, threeRenderer;
+let activeAnimContainer = null;
+let starfieldMesh = null;
+let threeMaterials = {};
+let waveGeometry = null;
+
 document.addEventListener('DOMContentLoaded', () => {
+  applyUserTheme(userTheme);
+  initThreeBackground();
+  initCustomCursor();
   initMobileNav();
   checkAdminState();
   loadProfile();
   loadContacts();
   loadCards();
+
+  // User Light/Dark Mode Switcher
+  const userThemeToggleBtn = document.getElementById('userThemeToggleBtn');
+  if (userThemeToggleBtn) {
+    userThemeToggleBtn.addEventListener('click', () => {
+      userTheme = userTheme === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('userTheme', userTheme);
+      applyUserTheme(userTheme);
+    });
+  }
 
   // Floating Owner Button
   const ownerBtn = document.getElementById('ownerBtn');
@@ -212,7 +236,605 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-/* Auth Guard Helpers */
+/* ==========================================================================
+   USER THEME (DARK / LIGHT) & ADMIN STUDIO (6 ANIMATIONS & 5 PALETTES)
+   ========================================================================== */
+function applyUserTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('userThemeToggleBtn');
+  if (btn) {
+    btn.innerHTML = theme === 'dark' ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-sun" style="color: #f59e0b;"></i>';
+  }
+  updateThreeColors();
+}
+
+function applyThemePalette(palette) {
+  currentPalette = palette || 'cyan';
+  document.documentElement.setAttribute('data-palette', currentPalette);
+
+  document.querySelectorAll('.palette-card').forEach(card => {
+    card.classList.remove('active-palette');
+  });
+  const el = document.getElementById(`palette-${currentPalette}`);
+  if (el) el.classList.add('active-palette');
+
+  updateThreeColors();
+}
+
+function previewThemePalette(palette) {
+  applyThemePalette(palette);
+}
+
+function applyAnimationModel(model) {
+  currentAnimation = model || 'octaSphere';
+
+  document.querySelectorAll('.anim-card').forEach(card => {
+    card.classList.remove('active-anim');
+  });
+  const el = document.getElementById(`anim-${currentAnimation}`);
+  if (el) el.classList.add('active-anim');
+
+  build3DAnimation(currentAnimation);
+}
+
+function previewAnimation(model) {
+  applyAnimationModel(model);
+}
+
+function openThemeStudioModal() {
+  if (!ensureAdminUnlocked()) return;
+  const modal = document.getElementById('themeStudioModal');
+  if (modal) {
+    document.querySelectorAll('.palette-card').forEach(c => c.classList.remove('active-palette'));
+    const pCard = document.getElementById(`palette-${currentPalette}`);
+    if (pCard) pCard.classList.add('active-palette');
+
+    document.querySelectorAll('.anim-card').forEach(c => c.classList.remove('active-anim'));
+    const aCard = document.getElementById(`anim-${currentAnimation}`);
+    if (aCard) aCard.classList.add('active-anim');
+
+    modal.classList.add('show-modal');
+    modal.style.display = 'flex';
+  }
+}
+
+function closeThemeStudioModal() {
+  const modal = document.getElementById('themeStudioModal');
+  if (modal) {
+    modal.classList.remove('show-modal');
+    modal.style.display = 'none';
+  }
+}
+
+async function saveStudioSettings() {
+  if (!ensureAdminUnlocked()) return;
+
+  try {
+    const res = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': adminToken
+      },
+      body: JSON.stringify({ 
+        themePalette: currentPalette,
+        animationMode: currentAnimation
+      })
+    });
+
+    if (res.ok) {
+      alert(`Published! 3D Animation: "${currentAnimation}" | Color Palette: "${currentPalette.toUpperCase()}".`);
+      closeThemeStudioModal();
+    } else {
+      handleAuthFailure(res);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Failed to save settings to server.");
+  }
+}
+
+const saveThemePalette = saveStudioSettings;
+
+window.saveStudioSettings = saveStudioSettings;
+window.saveThemePalette = saveThemePalette;
+window.openThemeStudioModal = openThemeStudioModal;
+window.closeThemeStudioModal = closeThemeStudioModal;
+window.previewThemePalette = previewThemePalette;
+window.previewAnimation = previewAnimation;
+
+/* ==========================================================================
+   MULTI-DEVICE RESPONSIVE 3D ENGINE (6 UNIQUE MODELS + SOFT CONTRAST)
+   ========================================================================== */
+function getDeviceLayoutMetrics() {
+  const w = window.innerWidth;
+  if (w < 480) {
+    return { camZ: 35, scale: 0.68, offsetX: 0, offsetY: 1.4, isMobile: true };
+  } else if (w < 768) {
+    return { camZ: 31, scale: 0.78, offsetX: 0, offsetY: 1.0, isMobile: true };
+  } else if (w < 1080) {
+    return { camZ: 27, scale: 0.88, offsetX: 3.2, offsetY: 0.8, isMobile: false };
+  } else {
+    return { camZ: 24, scale: 1.0, offsetX: 5.8, offsetY: 0.6, isMobile: false };
+  }
+}
+
+function updateResponsive3DLayout() {
+  if (!threeCamera || !threeRenderer) return;
+  const metrics = getDeviceLayoutMetrics();
+
+  threeCamera.aspect = window.innerWidth / window.innerHeight;
+  threeCamera.position.z = metrics.camZ;
+  threeCamera.updateProjectionMatrix();
+
+  threeRenderer.setSize(window.innerWidth, window.innerHeight);
+  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  if (activeAnimContainer) {
+    activeAnimContainer.scale.set(metrics.scale, metrics.scale, metrics.scale);
+    if (currentAnimation === 'quantumWave') {
+      activeAnimContainer.position.x = 0;
+      activeAnimContainer.position.y = metrics.isMobile ? -3.5 : -1.5;
+    } else {
+      activeAnimContainer.position.x = metrics.offsetX;
+      activeAnimContainer.position.y = metrics.offsetY;
+    }
+  }
+}
+
+function initThreeBackground() {
+  const canvas = document.getElementById('threeCanvas');
+  if (!canvas || typeof THREE === 'undefined') return;
+
+  const metrics = getDeviceLayoutMetrics();
+  threeScene = new THREE.Scene();
+  threeCamera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 1000);
+  threeCamera.position.z = metrics.camZ;
+
+  threeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+  threeRenderer.setSize(window.innerWidth, window.innerHeight);
+  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  // Subtle Ambient Cosmic Dust Particles
+  const particleCount = metrics.isMobile ? 320 : 600;
+  const pPositions = new Float32Array(particleCount * 3);
+  for (let i = 0; i < particleCount; i++) {
+    const i3 = i * 3;
+    pPositions[i3] = (Math.random() - 0.5) * 90;
+    pPositions[i3 + 1] = (Math.random() - 0.5) * 90;
+    pPositions[i3 + 2] = (Math.random() - 0.5) * 65;
+  }
+  const particleGeo = new THREE.BufferGeometry();
+  particleGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+  const particleMat = new THREE.PointsMaterial({
+    size: 0.13,
+    color: 0x38bdf8,
+    transparent: true,
+    opacity: 0.25,
+    blending: THREE.AdditiveBlending
+  });
+  starfieldMesh = new THREE.Points(particleGeo, particleMat);
+  threeScene.add(starfieldMesh);
+
+  threeMaterials.particleMat = particleMat;
+
+  build3DAnimation(currentAnimation);
+
+  // Smooth Mouse & Touch Parallax
+  let mouseX = 0;
+  let mouseY = 0;
+  let targetX = 0;
+  let targetY = 0;
+
+  window.addEventListener('mousemove', (e) => {
+    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  window.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 0) {
+      mouseX = (e.touches[0].clientX / window.innerWidth - 0.5) * 1.4;
+      mouseY = (e.touches[0].clientY / window.innerHeight - 0.5) * 1.4;
+    }
+  }, { passive: true });
+
+  window.addEventListener('resize', updateResponsive3DLayout);
+
+  // 60FPS Fluid Animation Loop
+  const clock = new THREE.Clock();
+  function animate() {
+    requestAnimationFrame(animate);
+    const elapsedTime = clock.getElapsedTime();
+    const m = getDeviceLayoutMetrics();
+
+    if (activeAnimContainer) {
+      // 1. Octa-Geodesic Shield
+      if (currentAnimation === 'octaSphere') {
+        activeAnimContainer.rotation.y = elapsedTime * 0.065;
+        activeAnimContainer.rotation.x = elapsedTime * 0.03;
+
+        if (activeAnimContainer.userData.innerOcta) {
+          activeAnimContainer.userData.innerOcta.rotation.y = -elapsedTime * 0.1;
+          activeAnimContainer.userData.innerOcta.rotation.z = elapsedTime * 0.06;
+        }
+        const pulse = m.scale * (1 + Math.sin(elapsedTime * 1.4) * 0.025);
+        activeAnimContainer.scale.set(pulse, pulse, pulse);
+      } 
+      // 2. Cyber Torus Vortex
+      else if (currentAnimation === 'cyberTorus') {
+        const { torus1, torus2, knot } = activeAnimContainer.userData;
+        if (torus1) {
+          torus1.rotation.x = elapsedTime * 0.07;
+          torus1.rotation.y = elapsedTime * 0.08;
+        }
+        if (torus2) {
+          torus2.rotation.x = -elapsedTime * 0.06;
+          torus2.rotation.z = elapsedTime * 0.09;
+        }
+        if (knot) {
+          knot.rotation.y = elapsedTime * 0.11;
+          knot.rotation.z = -elapsedTime * 0.07;
+        }
+      } 
+      // 3. Quantum Wave Lattice
+      else if (currentAnimation === 'quantumWave') {
+        if (waveGeometry) {
+          const pos = waveGeometry.attributes.position;
+          const count = pos.count;
+          for (let i = 0; i < count; i++) {
+            const x = pos.getX(i);
+            const y = pos.getY(i);
+            const z = Math.sin(x * 0.24 + elapsedTime * 1.5) * Math.cos(y * 0.24 + elapsedTime * 1.2) * 2.3;
+            pos.setZ(i, z);
+          }
+          pos.needsUpdate = true;
+        }
+        activeAnimContainer.rotation.z = elapsedTime * 0.015;
+      } 
+      // 4. 4D Tesseract Cube
+      else if (currentAnimation === 'hyperCube') {
+        const { outerCube, innerCube, core } = activeAnimContainer.userData;
+        if (outerCube) {
+          outerCube.rotation.x = elapsedTime * 0.055;
+          outerCube.rotation.y = elapsedTime * 0.075;
+        }
+        if (innerCube) {
+          innerCube.rotation.x = -elapsedTime * 0.09;
+          innerCube.rotation.y = -elapsedTime * 0.08;
+        }
+        if (core) {
+          core.rotation.y = elapsedTime * 0.14;
+        }
+      }
+      // 5. Neural DNA Helix (NEW)
+      else if (currentAnimation === 'dnaHelix') {
+        const { helixGroup } = activeAnimContainer.userData;
+        if (helixGroup) {
+          helixGroup.rotation.y = elapsedTime * 0.18;
+        }
+        activeAnimContainer.position.y = m.offsetY + Math.sin(elapsedTime * 1.2) * 0.45;
+      }
+      // 6. Celestial Gyro Rings (NEW)
+      else if (currentAnimation === 'orbitalRings') {
+        const { ring1, ring2, ring3, coreGem } = activeAnimContainer.userData;
+        if (ring1) {
+          ring1.rotation.x = elapsedTime * 0.12;
+          ring1.rotation.y = elapsedTime * 0.06;
+        }
+        if (ring2) {
+          ring2.rotation.y = -elapsedTime * 0.14;
+          ring2.rotation.z = elapsedTime * 0.08;
+        }
+        if (ring3) {
+          ring3.rotation.x = elapsedTime * 0.07;
+          ring3.rotation.z = -elapsedTime * 0.15;
+        }
+        if (coreGem) {
+          coreGem.rotation.y = elapsedTime * 0.22;
+          coreGem.rotation.x = -elapsedTime * 0.12;
+        }
+      }
+    }
+
+    if (starfieldMesh) {
+      starfieldMesh.rotation.y = elapsedTime * 0.008;
+    }
+
+    // Smooth Parallax Interpolation
+    targetX += (mouseX * 2.5 - targetX) * 0.045;
+    targetY += (-mouseY * 2.5 - targetY) * 0.045;
+    threeCamera.position.x = targetX;
+    threeCamera.position.y = targetY;
+    threeCamera.lookAt(threeScene.position);
+
+    threeRenderer.render(threeScene, threeCamera);
+  }
+  animate();
+}
+
+/* Build All 6 Distinct 3D Animation Models */
+function build3DAnimation(mode) {
+  if (!threeScene) return;
+
+  if (activeAnimContainer) {
+    threeScene.remove(activeAnimContainer);
+    activeAnimContainer.traverse(obj => {
+      if (obj.geometry) obj.geometry.dispose();
+    });
+    activeAnimContainer = null;
+  }
+  waveGeometry = null;
+
+  activeAnimContainer = new THREE.Group();
+
+  const mainWireMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16 });
+  const secondaryWireMat = new THREE.LineBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.20 });
+  const vertexMat = new THREE.PointsMaterial({
+    color: 0x38bdf8,
+    size: 0.34,
+    transparent: true,
+    opacity: 0.50,
+    blending: THREE.AdditiveBlending
+  });
+
+  threeMaterials.mainWire = mainWireMat;
+  threeMaterials.secondaryWire = secondaryWireMat;
+  threeMaterials.vertex = vertexMat;
+
+  // 1. OCTA-GEODESIC SHIELD
+  if (mode === 'octaSphere') {
+    const sphereGeo = new THREE.IcosahedronGeometry(10.0, 2);
+    const wireframeSphere = new THREE.LineSegments(new THREE.WireframeGeometry(sphereGeo), mainWireMat);
+    activeAnimContainer.add(wireframeSphere);
+
+    const vertexPoints = new THREE.Points(sphereGeo, vertexMat);
+    activeAnimContainer.add(vertexPoints);
+
+    const innerGeo = new THREE.OctahedronGeometry(5.8, 1);
+    const innerOcta = new THREE.LineSegments(new THREE.WireframeGeometry(innerGeo), secondaryWireMat);
+    activeAnimContainer.add(innerOcta);
+
+    activeAnimContainer.userData = { wireframeSphere, vertexPoints, innerOcta };
+  }
+
+  // 2. CYBER TORUS VORTEX
+  else if (mode === 'cyberTorus') {
+    const t1Geo = new THREE.TorusGeometry(9.8, 2.1, 14, 60);
+    const torus1 = new THREE.LineSegments(new THREE.WireframeGeometry(t1Geo), mainWireMat);
+    activeAnimContainer.add(torus1);
+
+    const t2Geo = new THREE.TorusGeometry(6.8, 1.5, 12, 48);
+    const torus2 = new THREE.LineSegments(new THREE.WireframeGeometry(t2Geo), secondaryWireMat);
+    activeAnimContainer.add(torus2);
+
+    const knotGeo = new THREE.TorusKnotGeometry(3.8, 0.65, 56, 10);
+    const knot = new THREE.LineSegments(new THREE.WireframeGeometry(knotGeo), mainWireMat);
+    activeAnimContainer.add(knot);
+
+    activeAnimContainer.userData = { torus1, torus2, knot };
+  }
+
+  // 3. QUANTUM WAVE LATTICE
+  else if (mode === 'quantumWave') {
+    waveGeometry = new THREE.PlaneGeometry(42, 42, 34, 34);
+
+    const wavePoints = new THREE.Points(waveGeometry, vertexMat);
+    wavePoints.rotation.x = -Math.PI / 2.3;
+    activeAnimContainer.add(wavePoints);
+
+    const waveWire = new THREE.LineSegments(new THREE.WireframeGeometry(waveGeometry), mainWireMat);
+    waveWire.rotation.x = -Math.PI / 2.3;
+    activeAnimContainer.add(waveWire);
+
+    activeAnimContainer.userData = { wavePoints, waveWire };
+  }
+
+  // 4. 4D TESSERACT (HYPERCUBE)
+  else if (mode === 'hyperCube') {
+    const size = 10.0;
+    const outerGeo = new THREE.BoxGeometry(size, size, size);
+    const outerCube = new THREE.LineSegments(new THREE.WireframeGeometry(outerGeo), mainWireMat);
+    outerCube.add(new THREE.Points(outerGeo, vertexMat));
+    activeAnimContainer.add(outerCube);
+
+    const innerGeo = new THREE.BoxGeometry(size * 0.56, size * 0.56, size * 0.56);
+    const innerCube = new THREE.LineSegments(new THREE.WireframeGeometry(innerGeo), secondaryWireMat);
+    activeAnimContainer.add(innerCube);
+
+    const coreGeo = new THREE.OctahedronGeometry(size * 0.28, 0);
+    const core = new THREE.LineSegments(new THREE.WireframeGeometry(coreGeo), mainWireMat);
+    activeAnimContainer.add(core);
+
+    activeAnimContainer.userData = { outerCube, innerCube, core };
+  }
+
+  // 5. NEURAL DNA HELIX (NEW PROFESSIONAL & SIMPLE)
+  else if (mode === 'dnaHelix') {
+    const helixGroup = new THREE.Group();
+    const numRungs = 30;
+    const height = 22;
+    const radius = 4.6;
+
+    const strandPositions = [];
+    const rungVertices = [];
+
+    for (let i = 0; i < numRungs; i++) {
+      const t = i / (numRungs - 1);
+      const y = (t - 0.5) * height;
+      const angle = t * Math.PI * 3.5;
+
+      const x1 = Math.cos(angle) * radius;
+      const z1 = Math.sin(angle) * radius;
+
+      const x2 = Math.cos(angle + Math.PI) * radius;
+      const z2 = Math.sin(angle + Math.PI) * radius;
+
+      strandPositions.push(x1, y, z1, x2, y, z2);
+      rungVertices.push(x1, y, z1, x2, y, z2);
+    }
+
+    const nodesGeo = new THREE.BufferGeometry();
+    nodesGeo.setAttribute('position', new THREE.Float32BufferAttribute(strandPositions, 3));
+    const nodesPoints = new THREE.Points(nodesGeo, vertexMat);
+    helixGroup.add(nodesPoints);
+
+    const rungsGeo = new THREE.BufferGeometry();
+    rungsGeo.setAttribute('position', new THREE.Float32BufferAttribute(rungVertices, 3));
+    const rungsLines = new THREE.LineSegments(rungsGeo, mainWireMat);
+    helixGroup.add(rungsLines);
+
+    // Tilt DNA slightly for a sleek architectural angle
+    helixGroup.rotation.z = Math.PI / 7;
+    activeAnimContainer.add(helixGroup);
+    activeAnimContainer.userData = { helixGroup };
+  }
+
+  // 6. CELESTIAL GYRO RINGS (NEW MINIMALIST & EXECUTIVE)
+  else if (mode === 'orbitalRings') {
+    const r1Geo = new THREE.TorusGeometry(10.5, 0.08, 12, 90);
+    const ring1 = new THREE.LineSegments(new THREE.WireframeGeometry(r1Geo), mainWireMat);
+    ring1.add(new THREE.Points(r1Geo, vertexMat));
+    activeAnimContainer.add(ring1);
+
+    const r2Geo = new THREE.TorusGeometry(8.0, 0.08, 12, 75);
+    const ring2 = new THREE.LineSegments(new THREE.WireframeGeometry(r2Geo), secondaryWireMat);
+    activeAnimContainer.add(ring2);
+
+    const r3Geo = new THREE.TorusGeometry(5.5, 0.08, 12, 60);
+    const ring3 = new THREE.LineSegments(new THREE.WireframeGeometry(r3Geo), mainWireMat);
+    activeAnimContainer.add(ring3);
+
+    const coreGeo = new THREE.OctahedronGeometry(2.4, 0);
+    const coreGem = new THREE.LineSegments(new THREE.WireframeGeometry(coreGeo), secondaryWireMat);
+    activeAnimContainer.add(coreGem);
+
+    activeAnimContainer.userData = { ring1, ring2, ring3, coreGem };
+  }
+
+  threeScene.add(activeAnimContainer);
+  updateResponsive3DLayout();
+  updateThreeColors();
+}
+
+/* Soft & Lighter Contrast Calibration so Text Always Pops Clearly */
+function updateThreeColors() {
+  if (!threeMaterials.mainWire) return;
+
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+
+  // Soft Ambient Dark Mode Palettes (Kept lighter/softer than the bright white text)
+  const darkPalettes = {
+    cyan: { primary: 0x0284c7, secondary: 0x4f46e5 },
+    violet: { primary: 0x7c3aed, secondary: 0xc026d3 },
+    emerald: { primary: 0x059669, secondary: 0x0284c7 },
+    crimson: { primary: 0xe11d48, secondary: 0xd97706 },
+    amber: { primary: 0xd97706, secondary: 0xe11d48 }
+  };
+
+  // Soft Muted Light Mode Palettes (Kept lighter/softer than the deep midnight ink text)
+  const lightPalettes = {
+    cyan: { primary: 0x0284c7, secondary: 0x4338ca },
+    violet: { primary: 0x6d28d9, secondary: 0xbe185d },
+    emerald: { primary: 0x047857, secondary: 0x0e7490 },
+    crimson: { primary: 0xbe123c, secondary: 0xc2410c },
+    amber: { primary: 0xb45309, secondary: 0x9f1239 }
+  };
+
+  const active = (isLight ? lightPalettes : darkPalettes)[currentPalette] || (isLight ? lightPalettes.cyan : darkPalettes.cyan);
+
+  // Calibrated low opacity so 3D animations never overpower foreground text
+  if (threeMaterials.mainWire) {
+    threeMaterials.mainWire.color.setHex(active.primary);
+    threeMaterials.mainWire.opacity = isLight ? 0.18 : 0.16;
+  }
+  if (threeMaterials.vertex) {
+    threeMaterials.vertex.color.setHex(active.primary);
+    threeMaterials.vertex.opacity = isLight ? 0.40 : 0.50;
+  }
+  if (threeMaterials.secondaryWire) {
+    threeMaterials.secondaryWire.color.setHex(active.secondary);
+    threeMaterials.secondaryWire.opacity = isLight ? 0.22 : 0.20;
+  }
+  if (threeMaterials.particleMat) {
+    threeMaterials.particleMat.color.setHex(active.primary);
+    threeMaterials.particleMat.opacity = isLight ? 0.22 : 0.28;
+  }
+}
+
+/* ==========================================================================
+   CUSTOM SMOOTH MAGNETIC CURSOR
+   ========================================================================== */
+function initCustomCursor() {
+  const dot = document.getElementById('cursorDot');
+  const ring = document.getElementById('cursorRing');
+  if (!dot || !ring) return;
+
+  if (window.matchMedia('(pointer: coarse)').matches) return;
+
+  let mouseX = 0;
+  let mouseY = 0;
+  let ringX = 0;
+  let ringY = 0;
+
+  window.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    dot.style.transform = `translate(${mouseX}px, ${mouseY}px)`;
+  });
+
+  function renderCursor() {
+    ringX += (mouseX - ringX) * 0.16;
+    ringY += (mouseY - ringY) * 0.16;
+    ring.style.transform = `translate(${ringX}px, ${ringY}px)`;
+    requestAnimationFrame(renderCursor);
+  }
+  renderCursor();
+
+  const interactiveSelector = 'a, button, input, textarea, .card, .thumb-item, .chip-link, .palette-card, .anim-card';
+  document.addEventListener('mouseover', (e) => {
+    if (e.target.closest(interactiveSelector)) {
+      ring.classList.add('cursor-hover');
+    }
+  });
+
+  document.addEventListener('mouseout', (e) => {
+    if (e.target.closest(interactiveSelector)) {
+      ring.classList.remove('cursor-hover');
+    }
+  });
+}
+
+/* ==========================================================================
+   CARD 3D TILT & MOUSE SPOTLIGHT EFFECT
+   ========================================================================== */
+function attachCardInteractions() {
+  const cards = document.querySelectorAll('.card');
+  cards.forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      card.style.setProperty('--mouse-x', `${x}px`);
+      card.style.setProperty('--mouse-y', `${y}px`);
+
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const rotateX = ((y - centerY) / centerY) * -5.5;
+      const rotateY = ((x - centerX) / centerX) * 5.5;
+
+      card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.015, 1.015, 1.015)`;
+    });
+
+    card.addEventListener('mouseleave', () => {
+      card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
+    });
+  });
+}
+
+/* ==========================================================================
+   AUTHENTICATION & SECURITY HELPERS
+   ========================================================================== */
 function ensureAdminUnlocked() {
   if (!adminToken) {
     alert("Owner Mode is locked. Please unlock it first.");
@@ -254,17 +876,25 @@ function initMobileNav() {
   }
 }
 
-/* Load Bio / Tagline */
+/* Load Bio, Theme & 3D Model from Backend */
 async function loadProfile() {
   try {
     const res = await fetch('/api/profile');
     const data = await res.json();
-    if (data && data.tagline) {
-      const el = document.getElementById('heroTagline');
-      if (el) el.innerText = data.tagline;
+    if (data) {
+      if (data.tagline) {
+        const el = document.getElementById('heroTagline');
+        if (el) el.innerText = data.tagline;
+      }
+      if (data.themePalette) {
+        applyThemePalette(data.themePalette);
+      }
+      if (data.animationMode) {
+        applyAnimationModel(data.animationMode);
+      }
     }
   } catch (err) {
-    console.error("Error loading profile tagline:", err);
+    console.error("Error loading profile:", err);
   }
 }
 
@@ -313,7 +943,6 @@ function renderContacts() {
   container.appendChild(addBtn);
 }
 
-/* Contact Link Modal Controls */
 function openAddContactLinkModal() {
   document.getElementById('contactLinkModalTitle').innerText = 'Add Contact Link';
   document.getElementById('editContactLinkId').value = '';
@@ -455,14 +1084,12 @@ async function loadCards() {
   }
 }
 
-/* Google Drive ID Extractor */
 function extractDriveFileId(url) {
   if (!url) return null;
   const match = url.match(/(?:\/file\/d\/|id=|\/d\/)([a-zA-Z0-9_-]{20,})/);
   return match ? match[1] : null;
 }
 
-/* Media Type Detection */
 function getMediaType(url) {
   if (!url) return 'image';
   const clean = url.trim().toLowerCase();
@@ -503,7 +1130,6 @@ function extractCardGallery(card) {
   return [];
 }
 
-/* Render Cards into Grids */
 function renderCards() {
   const expGrid = document.getElementById('experienceGrid');
   const projGrid = document.getElementById('projectsGrid');
@@ -521,13 +1147,12 @@ function renderCards() {
     const cardEl = document.createElement('div');
     cardEl.className = 'card';
 
-    // 1. Technical Skills
     if (card.section === 'skills') {
       const iconHtml = card.icon ? `<i class="${card.icon}"></i>` : `<i class="fa-solid fa-code"></i>`;
       cardEl.innerHTML = `
         <div class="skill-head">
           ${iconHtml}
-          <h3 class="card-title" style="margin: 0; font-size: 1.2rem;">${card.title}</h3>
+          <h3 class="card-title" style="margin: 0; font-size: 1.25rem;">${card.title}</h3>
         </div>
         <div class="card-tags" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 0;">
           ${(card.tags || []).map(t => `<span style="padding: 6px 12px; font-size: 0.82rem;">${t}</span>`).join('')}
@@ -541,7 +1166,6 @@ function renderCards() {
       return;
     }
 
-    // 2. Action Buttons
     const cardGallery = extractCardGallery(card);
     let actionsHtml = '';
 
@@ -604,9 +1228,10 @@ function renderCards() {
     if (card.section === 'certificates' && certGrid) certGrid.appendChild(cardEl);
     if (card.section === 'education' && eduGrid) eduGrid.appendChild(cardEl);
   });
+
+  attachCardInteractions();
 }
 
-/* Tagline / Bio Modal */
 function openTaglineModal() {
   const currentText = document.getElementById('heroTagline').innerText;
   document.getElementById('editTaglineInput').value = currentText;
@@ -623,7 +1248,6 @@ function closeTaglineModal() {
   }
 }
 
-/* Gallery Modal */
 function openGalleryModal(cardId) {
   const card = portfolioCards.find(c => String(c._id) === String(cardId));
   if (!card) return;
@@ -728,11 +1352,11 @@ function closeAllModals() {
   closeTaglineModal();
   closeContactLinkModal();
   closeMessagesModal();
+  closeThemeStudioModal();
   closeAdminModal();
   closeEditModal();
 }
 
-/* Owner Authentication */
 function openAdminModal() {
   const authModal = document.getElementById('adminAuthModal');
   if (authModal) {
@@ -757,7 +1381,7 @@ async function authenticateAdmin() {
       checkAdminState();
       closeAdminModal();
       loadMessages();
-      alert("Owner mode unlocked! You can now edit cards, bio, and contacts.");
+      alert("Owner mode unlocked! You can now customize 3D animations, palettes, and portfolio cards.");
     } else {
       alert("Incorrect password: " + (data.message || ""));
     }
@@ -772,21 +1396,20 @@ function checkAdminState() {
 
   if (adminToken) {
     document.body.classList.add('admin-mode-active');
-    ownerBtn.style.borderColor = '#34d399';
-    ownerBtn.style.color = '#34d399';
+    ownerBtn.style.borderColor = 'var(--accent-emerald)';
+    ownerBtn.style.color = 'var(--accent-emerald)';
     const textSpan = ownerBtn.querySelector('.btn-text');
     if (textSpan) textSpan.innerText = "Owner (Unlocked)";
     loadMessages();
   } else {
     document.body.classList.remove('admin-mode-active');
-    ownerBtn.style.borderColor = 'var(--accent-cyan)';
-    ownerBtn.style.color = 'var(--accent-cyan)';
+    ownerBtn.style.borderColor = 'var(--accent-primary)';
+    ownerBtn.style.color = 'var(--accent-primary)';
     const textSpan = ownerBtn.querySelector('.btn-text');
     if (textSpan) textSpan.innerText = "Owner Mode";
   }
 }
 
-/* PDF Modal */
 function openPdfModal(pdfUrl, title) {
   const modal = document.getElementById('pdfModal');
   const titleEl = document.getElementById('pdfModalTitle');
@@ -836,7 +1459,6 @@ function closeEditModal() {
   }
 }
 
-/* Dynamic Field Adjustment based on Card Section */
 function adjustModalFieldsForSection(section) {
   const groupTitle = document.getElementById('groupTitle');
   const groupIcon = document.getElementById('groupIcon');
@@ -893,7 +1515,6 @@ function adjustModalFieldsForSection(section) {
     if (certGroup) certGroup.style.display = 'none';
     if (lorGroup) lorGroup.style.display = 'none';
   } else {
-    // Experience
     if (groupTitle) groupTitle.style.display = 'flex';
     if (groupTags) groupTags.style.display = 'flex';
     if (groupSubtitle) groupSubtitle.style.display = 'flex';
@@ -964,3 +1585,25 @@ async function deleteCard(id) {
     console.error(err);
   }
 }
+
+window.openAddCardModal = openAddCardModal;
+window.openEditCardModal = openEditCardModal;
+window.deleteCard = deleteCard;
+window.authenticateAdmin = authenticateAdmin;
+window.openAdminModal = openAdminModal;
+window.closeAdminModal = closeAdminModal;
+window.openTaglineModal = openTaglineModal;
+window.closeTaglineModal = closeTaglineModal;
+window.openAddContactLinkModal = openAddContactLinkModal;
+window.openEditContactLinkModal = openEditContactLinkModal;
+window.closeContactLinkModal = closeContactLinkModal;
+window.deleteContactLink = deleteContactLink;
+window.openMessagesModal = openMessagesModal;
+window.closeMessagesModal = closeMessagesModal;
+window.deleteMessage = deleteMessage;
+window.openPdfModal = openPdfModal;
+window.closePdfModal = closePdfModal;
+window.openGalleryModal = openGalleryModal;
+window.closeGalleryModal = closeGalleryModal;
+window.selectGalleryMedia = selectGalleryMedia;
+window.applyUserTheme = applyUserTheme;

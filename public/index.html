@@ -1,35 +1,53 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark" data-palette="cyan">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Shrish Tyagi | Portfolio</title>
+  <title>Shrish Tyagi | Full-Stack Developer & AI Specialist</title>
+  
+  <!-- Primary Meta Tags -->
+  <meta name="title" content="Shrish Tyagi | Full-Stack Developer & AI Specialist">
+  <meta name="description" content="Portfolio of Shrish Tyagi — Specializing in high-performance web applications, Node.js micro-services, Power BI reporting, and AI integrations.">
+  
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  
+  <!-- Stylesheet -->
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Ambient background glow elements -->
-  <div class="ambient-glow glow-1"></div>
-  <div class="ambient-glow glow-2"></div>
-  <div class="ambient-glow glow-3"></div>
+  <!-- 3D Three.js WebGL Canvas Background -->
+  <canvas id="threeCanvas" class="three-canvas"></canvas>
 
-  <!-- Owner Floating Action Button -->
+  <!-- Custom Magnetic Cursor Follower -->
+  <div class="cursor-dot" id="cursorDot"></div>
+  <div class="cursor-ring" id="cursorRing"></div>
+
+  <!-- Cyber Grid Background Overlay -->
+  <div class="bg-grid-overlay"></div>
+
+  <!-- Floating Owner Access Button -->
   <button id="ownerBtn" class="owner-floating-btn" aria-label="Owner Access" title="Admin Portal">
     <i class="fa-solid fa-shield-halved"></i>
     <span class="btn-text">Owner Mode</span>
   </button>
 
-  <!-- Sticky Responsive Header -->
+  <!-- Sticky Navbar (Permanently Dark Frame with Theme-Reactive Liquid Glass Hover) -->
   <header class="navbar-wrapper">
     <nav class="navbar">
       <a href="#about" class="logo">
-        Shrish<span class="accent-dot">.</span>
+        <span class="logo-bracket">&lt;</span>Shrish<span class="accent-dot">.</span><span class="logo-bracket">/&gt;</span>
       </a>
 
-      <!-- Desktop Nav Links -->
+      <!-- Desktop Links with Liquid Frosted Glass Hover -->
       <div class="nav-links" id="navLinks">
         <a href="#about" class="nav-link">About</a>
         <a href="#experience" class="nav-link">Experience</a>
@@ -40,12 +58,25 @@
         <a href="#contact" class="nav-link nav-contact-btn">Get In Touch</a>
       </div>
 
-      <!-- Mobile Hamburger Toggle -->
-      <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation menu">
-        <span class="bar"></span>
-        <span class="bar"></span>
-        <span class="bar"></span>
-      </button>
+      <!-- Right Navbar Action Bar -->
+      <div class="nav-actions">
+        <!-- Normal User Light / Dark Mode Toggle -->
+        <button id="userThemeToggleBtn" class="theme-mode-btn" aria-label="Toggle Dark and Light Mode" title="Toggle Theme Mode">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+
+        <!-- Admin Studio Trigger (Strictly Owner Mode Only) -->
+        <button id="adminThemeStudioBtn" class="admin-theme-btn admin-only" onclick="openThemeStudioModal()" title="Admin 3D VFX & Theme Studio">
+          <i class="fa-solid fa-wand-magic-sparkles"></i>
+        </button>
+
+        <!-- Mobile Hamburger -->
+        <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation menu">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </button>
+      </div>
     </nav>
   </header>
 
@@ -61,17 +92,20 @@
           Full-Stack Web Developer & Data Analytics Enthusiast. Specializing in high-performance React architectures, Node.js micro-services, Power BI reporting, and AI integrations.
         </p>
 
-        <!-- Admin Editable Bio Button -->
-        <button id="editTaglineBtn" class="btn btn-edit admin-only" style="margin-bottom: 24px; font-size: 0.8rem; padding: 6px 14px; width: fit-content;" onclick="openTaglineModal()">
-          <i class="fa-solid fa-pen-to-square"></i> Edit Bio
-        </button>
-
-        <!-- Dynamic Quick Contacts Bar (Below Bio) -->
-        <div class="quick-contact-bar" id="quickContactsBar">
-          <!-- Rendered dynamically from MongoDB via JS -->
+        <!-- Admin Only Bio & Studio Controls (Strictly hidden in Normal Mode) -->
+        <div class="admin-bio-controls admin-only">
+          <button id="editTaglineBtn" class="btn btn-edit" style="font-size: 0.8rem; padding: 6px 14px;" onclick="openTaglineModal()">
+            <i class="fa-solid fa-pen-to-square"></i> Edit Bio
+          </button>
+          <button class="btn btn-edit" style="font-size: 0.8rem; padding: 6px 14px;" onclick="openThemeStudioModal()">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> 3D & Theme Studio
+          </button>
         </div>
 
-        <div class="hero-cta-group" style="margin-top: 28px;">
+        <!-- Dynamic Quick Contacts Bar -->
+        <div class="quick-contact-bar" id="quickContactsBar"></div>
+
+        <div class="hero-cta-group" style="margin-top: 32px;">
           <a href="#contact" class="btn primary-btn">
             <span>Send Message</span>
             <i class="fa-solid fa-arrow-right"></i>
@@ -160,7 +194,6 @@
           <span class="section-subtitle">Direct Transmission</span>
           <h2 class="section-title">Let's Connect</h2>
         </div>
-        <!-- Admin Inbox Viewer Button -->
         <button class="btn btn-edit admin-only" style="margin-top: 10px; font-size: 0.85rem;" onclick="openMessagesModal()">
           <i class="fa-solid fa-inbox"></i> View Received Messages (<span id="inboxCount">0</span>)
         </button>
@@ -191,6 +224,122 @@
     </section>
   </main>
 
+  <!-- Admin 3D VFX & Theme Studio Modal (Owner Only) -->
+  <div id="themeStudioModal" class="modal-backdrop" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-md" style="max-width: 680px;">
+      <div class="modal-top">
+        <h3 class="modal-title"><i class="fa-solid fa-wand-magic-sparkles"></i> 3D Animation & Theme Studio</h3>
+        <button class="modal-close" onclick="closeThemeStudioModal()" aria-label="Close modal">&times;</button>
+      </div>
+      <p class="modal-description">Choose from 6 responsive 3D animations and 5 color palettes. All animations are calibrated with soft contrast to keep foreground text crystal clear.</p>
+      
+      <!-- Section 1: 6 Professional 3D Animation Models -->
+      <div class="studio-section-title">
+        <i class="fa-solid fa-cubes"></i> Choose 3D Animation Model (6 Styles)
+      </div>
+      <div class="anim-grid">
+        <div class="anim-card active-anim" id="anim-octaSphere" onclick="previewAnimation('octaSphere')">
+          <div class="anim-icon"><i class="fa-solid fa-globe"></i></div>
+          <div class="anim-info">
+            <h4>Octa-Geodesic Shield</h4>
+            <span>Soft geodesic sphere with inner core</span>
+          </div>
+        </div>
+
+        <div class="anim-card" id="anim-cyberTorus" onclick="previewAnimation('cyberTorus')">
+          <div class="anim-icon"><i class="fa-solid fa-ring"></i></div>
+          <div class="anim-info">
+            <h4>Cyber Torus Vortex</h4>
+            <span>Interlocking dual wireframe rings</span>
+          </div>
+        </div>
+
+        <div class="anim-card" id="anim-quantumWave" onclick="previewAnimation('quantumWave')">
+          <div class="anim-icon"><i class="fa-solid fa-water"></i></div>
+          <div class="anim-info">
+            <h4>Quantum Wave Lattice</h4>
+            <span>Smooth undulating 3D wave terrain</span>
+          </div>
+        </div>
+
+        <div class="anim-card" id="anim-hyperCube" onclick="previewAnimation('hyperCube')">
+          <div class="anim-icon"><i class="fa-solid fa-cube"></i></div>
+          <div class="anim-info">
+            <h4>4D Tesseract Cube</h4>
+            <span>Nested multi-axial wireframe cube</span>
+          </div>
+        </div>
+
+        <div class="anim-card" id="anim-dnaHelix" onclick="previewAnimation('dnaHelix')">
+          <div class="anim-icon"><i class="fa-solid fa-dna"></i></div>
+          <div class="anim-info">
+            <h4>Neural DNA Helix</h4>
+            <span>Minimalist AI double-spiral lattice</span>
+          </div>
+        </div>
+
+        <div class="anim-card" id="anim-orbitalRings" onclick="previewAnimation('orbitalRings')">
+          <div class="anim-icon"><i class="fa-solid fa-compass-drafting"></i></div>
+          <div class="anim-info">
+            <h4>Celestial Gyro Rings</h4>
+            <span>Clean concentric multi-axis rings</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Color Palette Switcher -->
+      <div class="studio-section-title" style="margin-top: 24px;">
+        <i class="fa-solid fa-palette"></i> Choose Color Palette
+      </div>
+      <div class="palette-grid">
+        <div class="palette-card active-palette" id="palette-cyan" onclick="previewThemePalette('cyan')">
+          <div class="palette-swatch swatch-cyan"></div>
+          <div class="palette-info">
+            <h4>Cyber Cyan</h4>
+            <span>Cyan & Electric Blue</span>
+          </div>
+        </div>
+
+        <div class="palette-card" id="palette-violet" onclick="previewThemePalette('violet')">
+          <div class="palette-swatch swatch-violet"></div>
+          <div class="palette-info">
+            <h4>Neon Violet</h4>
+            <span>Magenta & Violet Glow</span>
+          </div>
+        </div>
+
+        <div class="palette-card" id="palette-emerald" onclick="previewThemePalette('emerald')">
+          <div class="palette-swatch swatch-emerald"></div>
+          <div class="palette-info">
+            <h4>Emerald Matrix</h4>
+            <span>Mint & Bio Green</span>
+          </div>
+        </div>
+
+        <div class="palette-card" id="palette-crimson" onclick="previewThemePalette('crimson')">
+          <div class="palette-swatch swatch-crimson"></div>
+          <div class="palette-info">
+            <h4>Crimson Ruby</h4>
+            <span>Rose & Fiery Coral</span>
+          </div>
+        </div>
+
+        <div class="palette-card" id="palette-amber" onclick="previewThemePalette('amber')">
+          <div class="palette-swatch swatch-amber"></div>
+          <div class="palette-info">
+            <h4>Sunset Amber</h4>
+            <span>Golden Sun & Amber</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer modal-footer-split" style="margin-top: 28px;">
+        <button type="button" class="btn secondary-btn" onclick="closeThemeStudioModal()">Cancel</button>
+        <button type="button" class="btn primary-btn" onclick="saveStudioSettings()">Save & Publish to Live Site</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Admin Received Messages Modal -->
   <div id="messagesModal" class="modal-backdrop" role="dialog" aria-modal="true">
     <div class="modal-dialog modal-md">
@@ -198,9 +347,7 @@
         <h3 class="modal-title"><i class="fa-solid fa-inbox"></i> Received Messages</h3>
         <button class="modal-close" onclick="closeMessagesModal()" aria-label="Close modal">&times;</button>
       </div>
-      <div class="messages-container" id="messagesContainer">
-        <!-- Rendered dynamically via JS -->
-      </div>
+      <div class="messages-container" id="messagesContainer"></div>
       <div class="modal-footer">
         <button type="button" class="btn secondary-btn" onclick="closeMessagesModal()">Close</button>
       </div>
@@ -217,18 +364,18 @@
       <form id="contactLinkForm" class="edit-form">
         <input type="hidden" id="editContactLinkId">
         <div class="form-group">
-          <label for="editContactLabel">Label / Text (e.g. GitHub, Email, +91...)</label>
+          <label for="editContactLabel">Label / Text</label>
           <input type="text" id="editContactLabel" required placeholder="e.g. GitHub">
         </div>
         <div class="form-group">
-          <label for="editContactUrl">Link / URL (e.g. https://..., mailto:..., tel:...)</label>
+          <label for="editContactUrl">Link / URL</label>
           <input type="text" id="editContactUrl" required placeholder="e.g. https://github.com/...">
         </div>
         <div class="form-group">
           <label for="editContactIcon">FontAwesome Icon Class</label>
           <input type="text" id="editContactIcon" required placeholder="e.g. fa-brands fa-github">
           <small style="color: var(--text-muted); font-size: 0.75rem;">
-            Common icons: <code>fa-solid fa-envelope</code>, <code>fa-solid fa-phone</code>, <code>fa-brands fa-github</code>, <code>fa-brands fa-linkedin-in</code>, <code>fa-solid fa-globe</code>
+            Common: <code>fa-solid fa-envelope</code>, <code>fa-solid fa-phone</code>, <code>fa-brands fa-github</code>, <code>fa-brands fa-linkedin-in</code>
           </small>
         </div>
         <div class="modal-footer modal-footer-split">
@@ -288,11 +435,7 @@
         </div>
         <button class="modal-close" onclick="closeGalleryModal()" aria-label="Close modal">&times;</button>
       </div>
-      
-      <!-- Primary Viewer Screen -->
       <div class="gallery-viewer-screen" id="galleryViewerScreen"></div>
-
-      <!-- Thumbnail Carousel Strip -->
       <div class="gallery-thumbnails-wrapper">
         <span class="thumbnails-label">Media Clips & Screenshots:</span>
         <div class="gallery-thumbnails" id="galleryThumbnails"></div>
@@ -329,59 +472,51 @@
         <input type="hidden" id="editCardId">
         <input type="hidden" id="editCardSection">
 
-        <!-- Title Field (Always Visible) -->
         <div class="form-group" id="groupTitle">
           <label>Title</label>
           <input type="text" id="editTitle" placeholder="e.g. Programming Languages" required>
         </div>
 
-        <!-- FontAwesome Icon Class (Visible for Technical Skills) -->
         <div class="form-group" id="groupIcon">
-          <label for="editIcon">FontAwesome Icon Class (e.g. fa-solid fa-code)</label>
+          <label for="editIcon">FontAwesome Icon Class</label>
           <input type="text" id="editIcon" placeholder="e.g. fa-solid fa-code">
           <small style="color: var(--text-muted); font-size: 0.75rem;">
-            Popular skill icons: <code>fa-solid fa-code</code>, <code>fa-solid fa-screwdriver-wrench</code>, <code>fa-solid fa-database</code>, <code>fa-solid fa-layer-group</code>, <code>fa-solid fa-terminal</code>
+            Common: <code>fa-solid fa-code</code>, <code>fa-solid fa-screwdriver-wrench</code>, <code>fa-solid fa-database</code>
           </small>
         </div>
 
-        <!-- Tags Field (Skills & Categories) -->
         <div class="form-group" id="groupTags">
           <label>Tags / Skills (Comma separated)</label>
           <input type="text" id="editTags" placeholder="e.g. Python, JavaScript, React, Node.js">
         </div>
 
-        <!-- Subtitle Field -->
         <div class="form-group" id="groupSubtitle">
           <label>Subtitle / Role</label>
           <input type="text" id="editSubtitle" placeholder="e.g. Full-Stack Developer">
         </div>
 
-        <!-- Period / Duration Field -->
         <div class="form-group" id="groupPeriod">
           <label>Duration / Period</label>
           <input type="text" id="editPeriod" placeholder="e.g. July 2025 - Dec 2025">
         </div>
 
-        <!-- Bullet Points Field -->
         <div class="form-group" id="groupDescription">
           <label>Bullet Points (Separate with '|')</label>
           <textarea id="editDescription" rows="3" placeholder="Point 1 | Point 2"></textarea>
         </div>
 
-        <!-- Project Exclusive: Gallery Media Inputs -->
         <div class="form-group" id="galleryFieldGroup">
           <label>Gallery Media URLs / Clips (Separate with comma or new line)</label>
-          <textarea id="editGallery" rows="3" placeholder="e.g. /uploads/clip1.mp4, /uploads/screen1.png, https://..."></textarea>
-          <small style="color: var(--text-muted); font-size: 0.75rem;">Supports: .mp4, .webm, YouTube links, and images (.jpg, .png, .webp)</small>
+          <textarea id="editGallery" rows="3" placeholder="Google Drive links, YouTube links, mp4 videos or images"></textarea>
+          <small style="color: var(--text-muted); font-size: 0.75rem;">Supports: Google Drive, YouTube, direct MP4 videos, and images</small>
         </div>
 
-        <!-- Non-Project Fields: Certificate & LOR -->
         <div class="form-group" id="certFieldGroup">
-          <label>Certificate PDF Link (e.g., /uploads/cert.pdf)</label>
+          <label>Certificate Link (PDF or Google Drive URL)</label>
           <input type="text" id="editCertPdf">
         </div>
         <div class="form-group" id="lorFieldGroup">
-          <label>Offer Letter / LOR Link (e.g., /uploads/lor.pdf)</label>
+          <label>Offer Letter / LOR Link (PDF or Google Drive URL)</label>
           <input type="text" id="editLorPdf">
         </div>
 
