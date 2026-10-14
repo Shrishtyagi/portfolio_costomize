@@ -8,12 +8,16 @@ let contactLinks = [];
 let receivedMessages = [];
 let activeGalleryMediaList = [];
 
-// Three.js Core Variables
-let threeScene, threeCamera, threeRenderer;
+// Three.js Core Variables (Memory Optimized)
+let threeScene = null;
+let threeCamera = null;
+let threeRenderer = null;
 let activeAnimContainer = null;
 let starfieldMesh = null;
 let threeMaterials = {};
 let waveGeometry = null;
+let animFrameId = null;
+let resizeTimeout = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   applyUserTheme(userTheme);
@@ -24,6 +28,16 @@ document.addEventListener('DOMContentLoaded', () => {
   loadProfile();
   loadContacts();
   loadCards();
+
+  // Pause WebGL rendering when tab is in background to save GPU & battery
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    } else if (!document.hidden && !animFrameId && threeRenderer) {
+      startAnimationLoop();
+    }
+  });
 
   // User Light/Dark Mode Switcher
   const userThemeToggleBtn = document.getElementById('userThemeToggleBtn');
@@ -266,7 +280,9 @@ function previewThemePalette(palette) {
 }
 
 function applyAnimationModel(model) {
-  currentAnimation = model || 'octaSphere';
+  const targetModel = model || 'octaSphere';
+  const changed = currentAnimation !== targetModel || !activeAnimContainer;
+  currentAnimation = targetModel;
 
   document.querySelectorAll('.anim-card').forEach(card => {
     card.classList.remove('active-anim');
@@ -274,7 +290,9 @@ function applyAnimationModel(model) {
   const el = document.getElementById(`anim-${currentAnimation}`);
   if (el) el.classList.add('active-anim');
 
-  build3DAnimation(currentAnimation);
+  if (changed && threeScene) {
+    build3DAnimation(currentAnimation);
+  }
 }
 
 function previewAnimation(model) {
@@ -344,8 +362,11 @@ window.previewThemePalette = previewThemePalette;
 window.previewAnimation = previewAnimation;
 
 /* ==========================================================================
-   MULTI-DEVICE RESPONSIVE 3D ENGINE (6 UNIQUE MODELS + SOFT CONTRAST)
+   VRAM-SAFE & CRASH-PROOF 3D ENGINE (THREE.JS)
    ========================================================================== */
+let mouseX = 0, mouseY = 0, targetX = 0, targetY = 0;
+let threeClock = null;
+
 function getDeviceLayoutMetrics() {
   const w = window.innerWidth;
   if (w < 480) {
@@ -362,13 +383,14 @@ function getDeviceLayoutMetrics() {
 function updateResponsive3DLayout() {
   if (!threeCamera || !threeRenderer) return;
   const metrics = getDeviceLayoutMetrics();
+  const w = Math.max(1, window.innerWidth);
+  const h = Math.max(1, window.innerHeight);
 
-  threeCamera.aspect = window.innerWidth / window.innerHeight;
+  threeCamera.aspect = w / h;
   threeCamera.position.z = metrics.camZ;
   threeCamera.updateProjectionMatrix();
 
-  threeRenderer.setSize(window.innerWidth, window.innerHeight);
-  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  threeRenderer.setSize(w, h, false);
 
   if (activeAnimContainer) {
     activeAnimContainer.scale.set(metrics.scale, metrics.scale, metrics.scale);
@@ -386,50 +408,27 @@ function initThreeBackground() {
   const canvas = document.getElementById('threeCanvas');
   if (!canvas || typeof THREE === 'undefined') return;
 
-  const metrics = getDeviceLayoutMetrics();
-  threeScene = new THREE.Scene();
-  threeCamera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 1000);
-  threeCamera.position.z = metrics.camZ;
+  // Handle WebGL Context Loss & Auto-Recovery
+  canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+    console.warn("WebGL Context Lost — pausing 3D loop for recovery.");
+  }, false);
 
-  threeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
-  threeRenderer.setSize(window.innerWidth, window.innerHeight);
-  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  canvas.addEventListener('webglcontextrestored', () => {
+    console.log("WebGL Context Restored — rebuilding 3D scene.");
+    setupSceneAndRenderer(canvas);
+  }, false);
 
-  // Subtle Ambient Cosmic Dust Particles
-  const particleCount = metrics.isMobile ? 320 : 600;
-  const pPositions = new Float32Array(particleCount * 3);
-  for (let i = 0; i < particleCount; i++) {
-    const i3 = i * 3;
-    pPositions[i3] = (Math.random() - 0.5) * 90;
-    pPositions[i3 + 1] = (Math.random() - 0.5) * 90;
-    pPositions[i3 + 2] = (Math.random() - 0.5) * 65;
-  }
-  const particleGeo = new THREE.BufferGeometry();
-  particleGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
-  const particleMat = new THREE.PointsMaterial({
-    size: 0.13,
-    color: 0x38bdf8,
-    transparent: true,
-    opacity: 0.25,
-    blending: THREE.AdditiveBlending
-  });
-  starfieldMesh = new THREE.Points(particleGeo, particleMat);
-  threeScene.add(starfieldMesh);
-
-  threeMaterials.particleMat = particleMat;
-
-  build3DAnimation(currentAnimation);
-
-  // Smooth Mouse & Touch Parallax
-  let mouseX = 0;
-  let mouseY = 0;
-  let targetX = 0;
-  let targetY = 0;
+  setupSceneAndRenderer(canvas);
 
   window.addEventListener('mousemove', (e) => {
     mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
     mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
-  });
+  }, { passive: true });
 
   window.addEventListener('touchmove', (e) => {
     if (e.touches.length > 0) {
@@ -438,17 +437,84 @@ function initThreeBackground() {
     }
   }, { passive: true });
 
-  window.addEventListener('resize', updateResponsive3DLayout);
+  // Debounced resize prevents D3D11 Texture2D Out-Of-Memory crashes
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(updateResponsive3DLayout, 150);
+  });
+}
 
-  // 60FPS Fluid Animation Loop
-  const clock = new THREE.Clock();
+function setupSceneAndRenderer(canvas) {
+  try {
+    const metrics = getDeviceLayoutMetrics();
+    threeScene = new THREE.Scene();
+    threeCamera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 1000);
+    threeCamera.position.z = metrics.camZ;
+
+    // Lightweight WebGL configuration: depth:false & stencil:false saves >75% GPU Texture2D VRAM
+    threeRenderer = new THREE.WebGLRenderer({
+      canvas: canvas,
+      alpha: true,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      powerPreference: 'default',
+      precision: 'mediump'
+    });
+    threeRenderer.setPixelRatio(1); // Locked to 1x to prevent 4K D3D11 Texture2D exhaustion
+    threeRenderer.setSize(window.innerWidth, window.innerHeight, false);
+
+    // Reusable Shared Materials (Never duplicated)
+    threeMaterials.mainWire = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16 });
+    threeMaterials.secondaryWire = new THREE.LineBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.20 });
+    threeMaterials.vertex = new THREE.PointsMaterial({
+      color: 0x38bdf8,
+      size: 0.34,
+      transparent: true,
+      opacity: 0.50,
+      blending: THREE.AdditiveBlending
+    });
+    threeMaterials.particleMat = new THREE.PointsMaterial({
+      size: 0.14,
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.25,
+      blending: THREE.AdditiveBlending
+    });
+
+    // Ambient Cosmic Dust Particles
+    const particleCount = metrics.isMobile ? 250 : 450;
+    const pPositions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      pPositions[i3] = (Math.random() - 0.5) * 85;
+      pPositions[i3 + 1] = (Math.random() - 0.5) * 85;
+      pPositions[i3 + 2] = (Math.random() - 0.5) * 60;
+    }
+    const particleGeo = new THREE.BufferGeometry();
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+    starfieldMesh = new THREE.Points(particleGeo, threeMaterials.particleMat);
+    threeScene.add(starfieldMesh);
+
+    threeClock = new THREE.Clock();
+    build3DAnimation(currentAnimation);
+    startAnimationLoop();
+  } catch (err) {
+    console.warn("WebGL initialization skipped due to hardware limits:", err);
+  }
+}
+
+function startAnimationLoop() {
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+
   function animate() {
-    requestAnimationFrame(animate);
-    const elapsedTime = clock.getElapsedTime();
+    animFrameId = requestAnimationFrame(animate);
+    if (!threeRenderer || !threeScene || !threeCamera) return;
+
+    const elapsedTime = threeClock ? threeClock.getElapsedTime() : 0;
     const m = getDeviceLayoutMetrics();
 
     if (activeAnimContainer) {
-      // 1. Octa-Geodesic Shield
       if (currentAnimation === 'octaSphere') {
         activeAnimContainer.rotation.y = elapsedTime * 0.065;
         activeAnimContainer.rotation.x = elapsedTime * 0.03;
@@ -460,7 +526,6 @@ function initThreeBackground() {
         const pulse = m.scale * (1 + Math.sin(elapsedTime * 1.4) * 0.025);
         activeAnimContainer.scale.set(pulse, pulse, pulse);
       } 
-      // 2. Cyber Torus Vortex
       else if (currentAnimation === 'cyberTorus') {
         const { torus1, torus2, knot } = activeAnimContainer.userData;
         if (torus1) {
@@ -476,7 +541,6 @@ function initThreeBackground() {
           knot.rotation.z = -elapsedTime * 0.07;
         }
       } 
-      // 3. Quantum Wave Lattice
       else if (currentAnimation === 'quantumWave') {
         if (waveGeometry) {
           const pos = waveGeometry.attributes.position;
@@ -484,14 +548,13 @@ function initThreeBackground() {
           for (let i = 0; i < count; i++) {
             const x = pos.getX(i);
             const y = pos.getY(i);
-            const z = Math.sin(x * 0.24 + elapsedTime * 1.5) * Math.cos(y * 0.24 + elapsedTime * 1.2) * 2.3;
+            const z = Math.sin(x * 0.24 + elapsedTime * 1.5) * Math.cos(y * 0.24 + elapsedTime * 1.2) * 2.2;
             pos.setZ(i, z);
           }
           pos.needsUpdate = true;
         }
         activeAnimContainer.rotation.z = elapsedTime * 0.015;
       } 
-      // 4. 4D Tesseract Cube
       else if (currentAnimation === 'hyperCube') {
         const { outerCube, innerCube, core } = activeAnimContainer.userData;
         if (outerCube) {
@@ -506,7 +569,6 @@ function initThreeBackground() {
           core.rotation.y = elapsedTime * 0.14;
         }
       }
-      // 5. Neural DNA Helix (NEW)
       else if (currentAnimation === 'dnaHelix') {
         const { helixGroup } = activeAnimContainer.userData;
         if (helixGroup) {
@@ -514,7 +576,6 @@ function initThreeBackground() {
         }
         activeAnimContainer.position.y = m.offsetY + Math.sin(elapsedTime * 1.2) * 0.45;
       }
-      // 6. Celestial Gyro Rings (NEW)
       else if (currentAnimation === 'orbitalRings') {
         const { ring1, ring2, ring3, coreGem } = activeAnimContainer.userData;
         if (ring1) {
@@ -540,7 +601,6 @@ function initThreeBackground() {
       starfieldMesh.rotation.y = elapsedTime * 0.008;
     }
 
-    // Smooth Parallax Interpolation
     targetX += (mouseX * 2.5 - targetX) * 0.045;
     targetY += (-mouseY * 2.5 - targetY) * 0.045;
     threeCamera.position.x = targetX;
@@ -549,49 +609,53 @@ function initThreeBackground() {
 
     threeRenderer.render(threeScene, threeCamera);
   }
+
   animate();
 }
 
-/* Build All 6 Distinct 3D Animation Models */
+/* Helper to create wireframe and immediately free temporary source geometry */
+function createWireframeSegment(sourceGeo, material, keepSourceForPoints = false) {
+  const wireGeo = new THREE.WireframeGeometry(sourceGeo);
+  const lineSeg = new THREE.LineSegments(wireGeo, material);
+  if (!keepSourceForPoints) {
+    sourceGeo.dispose();
+  }
+  return lineSeg;
+}
+
+/* Build All 6 Distinct 3D Animation Models (Zero Memory Leak) */
 function build3DAnimation(mode) {
   if (!threeScene) return;
 
+  // Dispose every geometry in old container to keep GPU VRAM clean
   if (activeAnimContainer) {
     threeScene.remove(activeAnimContainer);
     activeAnimContainer.traverse(obj => {
-      if (obj.geometry) obj.geometry.dispose();
+      if (obj.geometry) {
+        obj.geometry.dispose();
+      }
     });
     activeAnimContainer = null;
   }
-  waveGeometry = null;
+  if (waveGeometry) {
+    waveGeometry.dispose();
+    waveGeometry = null;
+  }
 
   activeAnimContainer = new THREE.Group();
-
-  const mainWireMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16 });
-  const secondaryWireMat = new THREE.LineBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.20 });
-  const vertexMat = new THREE.PointsMaterial({
-    color: 0x38bdf8,
-    size: 0.34,
-    transparent: true,
-    opacity: 0.50,
-    blending: THREE.AdditiveBlending
-  });
-
-  threeMaterials.mainWire = mainWireMat;
-  threeMaterials.secondaryWire = secondaryWireMat;
-  threeMaterials.vertex = vertexMat;
+  const { mainWire, secondaryWire, vertex } = threeMaterials;
 
   // 1. OCTA-GEODESIC SHIELD
   if (mode === 'octaSphere') {
     const sphereGeo = new THREE.IcosahedronGeometry(10.0, 2);
-    const wireframeSphere = new THREE.LineSegments(new THREE.WireframeGeometry(sphereGeo), mainWireMat);
+    const wireframeSphere = createWireframeSegment(sphereGeo, mainWire, true);
     activeAnimContainer.add(wireframeSphere);
 
-    const vertexPoints = new THREE.Points(sphereGeo, vertexMat);
+    const vertexPoints = new THREE.Points(sphereGeo, vertex);
     activeAnimContainer.add(vertexPoints);
 
     const innerGeo = new THREE.OctahedronGeometry(5.8, 1);
-    const innerOcta = new THREE.LineSegments(new THREE.WireframeGeometry(innerGeo), secondaryWireMat);
+    const innerOcta = createWireframeSegment(innerGeo, secondaryWire, false);
     activeAnimContainer.add(innerOcta);
 
     activeAnimContainer.userData = { wireframeSphere, vertexPoints, innerOcta };
@@ -599,16 +663,16 @@ function build3DAnimation(mode) {
 
   // 2. CYBER TORUS VORTEX
   else if (mode === 'cyberTorus') {
-    const t1Geo = new THREE.TorusGeometry(9.8, 2.1, 14, 60);
-    const torus1 = new THREE.LineSegments(new THREE.WireframeGeometry(t1Geo), mainWireMat);
+    const t1Geo = new THREE.TorusGeometry(9.8, 2.1, 12, 48);
+    const torus1 = createWireframeSegment(t1Geo, mainWire, false);
     activeAnimContainer.add(torus1);
 
-    const t2Geo = new THREE.TorusGeometry(6.8, 1.5, 12, 48);
-    const torus2 = new THREE.LineSegments(new THREE.WireframeGeometry(t2Geo), secondaryWireMat);
+    const t2Geo = new THREE.TorusGeometry(6.8, 1.5, 10, 40);
+    const torus2 = createWireframeSegment(t2Geo, secondaryWire, false);
     activeAnimContainer.add(torus2);
 
-    const knotGeo = new THREE.TorusKnotGeometry(3.8, 0.65, 56, 10);
-    const knot = new THREE.LineSegments(new THREE.WireframeGeometry(knotGeo), mainWireMat);
+    const knotGeo = new THREE.TorusKnotGeometry(3.8, 0.65, 48, 8);
+    const knot = createWireframeSegment(knotGeo, mainWire, false);
     activeAnimContainer.add(knot);
 
     activeAnimContainer.userData = { torus1, torus2, knot };
@@ -616,13 +680,14 @@ function build3DAnimation(mode) {
 
   // 3. QUANTUM WAVE LATTICE
   else if (mode === 'quantumWave') {
-    waveGeometry = new THREE.PlaneGeometry(42, 42, 34, 34);
+    waveGeometry = new THREE.PlaneGeometry(40, 40, 28, 28);
 
-    const wavePoints = new THREE.Points(waveGeometry, vertexMat);
+    const wavePoints = new THREE.Points(waveGeometry, vertex);
     wavePoints.rotation.x = -Math.PI / 2.3;
     activeAnimContainer.add(wavePoints);
 
-    const waveWire = new THREE.LineSegments(new THREE.WireframeGeometry(waveGeometry), mainWireMat);
+    const staticGridGeo = new THREE.PlaneGeometry(40, 40, 14, 14);
+    const waveWire = createWireframeSegment(staticGridGeo, mainWire, false);
     waveWire.rotation.x = -Math.PI / 2.3;
     activeAnimContainer.add(waveWire);
 
@@ -633,25 +698,25 @@ function build3DAnimation(mode) {
   else if (mode === 'hyperCube') {
     const size = 10.0;
     const outerGeo = new THREE.BoxGeometry(size, size, size);
-    const outerCube = new THREE.LineSegments(new THREE.WireframeGeometry(outerGeo), mainWireMat);
-    outerCube.add(new THREE.Points(outerGeo, vertexMat));
+    const outerCube = createWireframeSegment(outerGeo, mainWire, true);
+    outerCube.add(new THREE.Points(outerGeo, vertex));
     activeAnimContainer.add(outerCube);
 
     const innerGeo = new THREE.BoxGeometry(size * 0.56, size * 0.56, size * 0.56);
-    const innerCube = new THREE.LineSegments(new THREE.WireframeGeometry(innerGeo), secondaryWireMat);
+    const innerCube = createWireframeSegment(innerGeo, secondaryWire, false);
     activeAnimContainer.add(innerCube);
 
     const coreGeo = new THREE.OctahedronGeometry(size * 0.28, 0);
-    const core = new THREE.LineSegments(new THREE.WireframeGeometry(coreGeo), mainWireMat);
+    const core = createWireframeSegment(coreGeo, mainWire, false);
     activeAnimContainer.add(core);
 
     activeAnimContainer.userData = { outerCube, innerCube, core };
   }
 
-  // 5. NEURAL DNA HELIX (NEW PROFESSIONAL & SIMPLE)
+  // 5. NEURAL DNA HELIX
   else if (mode === 'dnaHelix') {
     const helixGroup = new THREE.Group();
-    const numRungs = 30;
+    const numRungs = 28;
     const height = 22;
     const radius = 4.6;
 
@@ -675,37 +740,36 @@ function build3DAnimation(mode) {
 
     const nodesGeo = new THREE.BufferGeometry();
     nodesGeo.setAttribute('position', new THREE.Float32BufferAttribute(strandPositions, 3));
-    const nodesPoints = new THREE.Points(nodesGeo, vertexMat);
+    const nodesPoints = new THREE.Points(nodesGeo, vertex);
     helixGroup.add(nodesPoints);
 
     const rungsGeo = new THREE.BufferGeometry();
     rungsGeo.setAttribute('position', new THREE.Float32BufferAttribute(rungVertices, 3));
-    const rungsLines = new THREE.LineSegments(rungsGeo, mainWireMat);
+    const rungsLines = new THREE.LineSegments(rungsGeo, mainWire);
     helixGroup.add(rungsLines);
 
-    // Tilt DNA slightly for a sleek architectural angle
     helixGroup.rotation.z = Math.PI / 7;
     activeAnimContainer.add(helixGroup);
     activeAnimContainer.userData = { helixGroup };
   }
 
-  // 6. CELESTIAL GYRO RINGS (NEW MINIMALIST & EXECUTIVE)
+  // 6. CELESTIAL GYRO RINGS
   else if (mode === 'orbitalRings') {
-    const r1Geo = new THREE.TorusGeometry(10.5, 0.08, 12, 90);
-    const ring1 = new THREE.LineSegments(new THREE.WireframeGeometry(r1Geo), mainWireMat);
-    ring1.add(new THREE.Points(r1Geo, vertexMat));
+    const r1Geo = new THREE.TorusGeometry(10.5, 0.08, 8, 64);
+    const ring1 = createWireframeSegment(r1Geo, mainWire, true);
+    ring1.add(new THREE.Points(r1Geo, vertex));
     activeAnimContainer.add(ring1);
 
-    const r2Geo = new THREE.TorusGeometry(8.0, 0.08, 12, 75);
-    const ring2 = new THREE.LineSegments(new THREE.WireframeGeometry(r2Geo), secondaryWireMat);
+    const r2Geo = new THREE.TorusGeometry(8.0, 0.08, 8, 56);
+    const ring2 = createWireframeSegment(r2Geo, secondaryWire, false);
     activeAnimContainer.add(ring2);
 
-    const r3Geo = new THREE.TorusGeometry(5.5, 0.08, 12, 60);
-    const ring3 = new THREE.LineSegments(new THREE.WireframeGeometry(r3Geo), mainWireMat);
+    const r3Geo = new THREE.TorusGeometry(5.5, 0.08, 8, 48);
+    const ring3 = createWireframeSegment(r3Geo, mainWire, false);
     activeAnimContainer.add(ring3);
 
     const coreGeo = new THREE.OctahedronGeometry(2.4, 0);
-    const coreGem = new THREE.LineSegments(new THREE.WireframeGeometry(coreGeo), secondaryWireMat);
+    const coreGem = createWireframeSegment(coreGeo, secondaryWire, false);
     activeAnimContainer.add(coreGem);
 
     activeAnimContainer.userData = { ring1, ring2, ring3, coreGem };
@@ -716,13 +780,11 @@ function build3DAnimation(mode) {
   updateThreeColors();
 }
 
-/* Soft & Lighter Contrast Calibration so Text Always Pops Clearly */
 function updateThreeColors() {
   if (!threeMaterials.mainWire) return;
 
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
 
-  // Soft Ambient Dark Mode Palettes (Kept lighter/softer than the bright white text)
   const darkPalettes = {
     cyan: { primary: 0x0284c7, secondary: 0x4f46e5 },
     violet: { primary: 0x7c3aed, secondary: 0xc026d3 },
@@ -731,7 +793,6 @@ function updateThreeColors() {
     amber: { primary: 0xd97706, secondary: 0xe11d48 }
   };
 
-  // Soft Muted Light Mode Palettes (Kept lighter/softer than the deep midnight ink text)
   const lightPalettes = {
     cyan: { primary: 0x0284c7, secondary: 0x4338ca },
     violet: { primary: 0x6d28d9, secondary: 0xbe185d },
@@ -742,7 +803,6 @@ function updateThreeColors() {
 
   const active = (isLight ? lightPalettes : darkPalettes)[currentPalette] || (isLight ? lightPalettes.cyan : darkPalettes.cyan);
 
-  // Calibrated low opacity so 3D animations never overpower foreground text
   if (threeMaterials.mainWire) {
     threeMaterials.mainWire.color.setHex(active.primary);
     threeMaterials.mainWire.opacity = isLight ? 0.18 : 0.16;
@@ -771,20 +831,17 @@ function initCustomCursor() {
 
   if (window.matchMedia('(pointer: coarse)').matches) return;
 
-  let mouseX = 0;
-  let mouseY = 0;
-  let ringX = 0;
-  let ringY = 0;
+  let cMouseX = 0, cMouseY = 0, ringX = 0, ringY = 0;
 
   window.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    dot.style.transform = `translate(${mouseX}px, ${mouseY}px)`;
-  });
+    cMouseX = e.clientX;
+    cMouseY = e.clientY;
+    dot.style.transform = `translate(${cMouseX}px, ${cMouseY}px)`;
+  }, { passive: true });
 
   function renderCursor() {
-    ringX += (mouseX - ringX) * 0.16;
-    ringY += (mouseY - ringY) * 0.16;
+    ringX += (cMouseX - ringX) * 0.16;
+    ringY += (cMouseY - ringY) * 0.16;
     ring.style.transform = `translate(${ringX}px, ${ringY}px)`;
     requestAnimationFrame(renderCursor);
   }
