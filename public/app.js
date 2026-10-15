@@ -398,7 +398,6 @@ function init3DCanvasEngine() {
   if (!oldCanvas) return;
 
   const canvas = oldCanvas.cloneNode(false);
-  // Enforce fixed background positioning so canvas never pushes navbar or content down
   canvas.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: -2 !important; pointer-events: none !important; display: block !important;';
   oldCanvas.parentNode.replaceChild(canvas, oldCanvas);
 

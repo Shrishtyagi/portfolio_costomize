@@ -37,6 +37,14 @@ const ProfileSchema = new mongoose.Schema({
   tagline: {
     type: String,
     default: "Full-Stack Web Developer & Data Analytics Enthusiast. Specializing in high-performance web applications and systems."
+  },
+  themePalette: {
+    type: String,
+    default: "cyan" // 'cyan', 'violet', 'emerald', 'crimson', 'amber'
+  },
+  animationMode: {
+    type: String,
+    default: "octaSphere" // 'octaSphere', 'cyberTorus', 'quantumWave', 'hyperCube'
   }
 });
 const Profile = mongoose.model('Profile', ProfileSchema);
@@ -82,12 +90,10 @@ function verifyAdmin(req, res, next) {
     return res.status(403).json({ success: false, message: "Authorization token missing." });
   }
 
-  // 1. Direct password match or legacy session token
   if (token === ADMIN_PASSWORD || token === "admin-session-active") {
     return next();
   }
 
-  // 2. Cryptographic HMAC Token verification
   if (token.includes('.')) {
     try {
       const [timeStr, signature] = token.split('.');
@@ -96,7 +102,7 @@ function verifyAdmin(req, res, next) {
         return next();
       }
     } catch (err) {
-      // Signature parsing error, proceed to 403
+      // Signature parsing failure
     }
   }
 
@@ -121,7 +127,7 @@ app.post('/api/admin/verify', (req, res) => {
   return res.status(401).json({ success: false, message: "Invalid Owner Password" });
 });
 
-// 2. Profile Tagline / Bio Routes
+// 2. Profile Tagline, Theme Palette & 3D Animation Routes
 app.get('/api/profile', async (req, res) => {
   try {
     let profile = await Profile.findOne();
@@ -138,7 +144,9 @@ app.put('/api/profile', verifyAdmin, async (req, res) => {
     if (!profile) {
       profile = new Profile(req.body);
     } else {
-      profile.tagline = req.body.tagline;
+      if (req.body.tagline !== undefined) profile.tagline = req.body.tagline;
+      if (req.body.themePalette !== undefined) profile.themePalette = req.body.themePalette;
+      if (req.body.animationMode !== undefined) profile.animationMode = req.body.animationMode;
     }
     await profile.save();
     res.json(profile);
@@ -281,7 +289,7 @@ app.post('/api/contact', async (req, res) => {
   }
 });
 
-// Start server locally if not in a serverless environment
+// Local Development Server Listener
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => console.log(`Server running locally on http://localhost:${PORT}`));
 }
