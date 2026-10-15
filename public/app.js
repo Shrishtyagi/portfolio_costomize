@@ -1,27 +1,38 @@
-let adminToken = sessionStorage.getItem('adminToken') || null;
+/* ==========================================================================
+   SAFE STORAGE HELPERS (Edge Tracking Prevention Safe)
+   ========================================================================== */
+function safeGetStorage(type, key, fallback = null) {
+  try {
+    const storage = type === 'session' ? window.sessionStorage : window.localStorage;
+    return storage.getItem(key) || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function safeSetStorage(type, key, value) {
+  try {
+    const storage = type === 'session' ? window.sessionStorage : window.localStorage;
+    if (value === null) storage.removeItem(key);
+    else storage.setItem(key, value);
+  } catch (e) {
+    // Ignore storage block warnings
+  }
+}
+
+let adminToken = safeGetStorage('session', 'adminToken', null);
 let currentPalette = 'cyan';
 let currentAnimation = 'octaSphere'; // 'octaSphere', 'cyberTorus', 'quantumWave', 'hyperCube', 'dnaHelix', 'orbitalRings'
-let userTheme = localStorage.getItem('userTheme') || 'dark';
+let userTheme = safeGetStorage('local', 'userTheme', 'dark');
 
 let portfolioCards = [];
 let contactLinks = [];
 let receivedMessages = [];
 let activeGalleryMediaList = [];
 
-// Three.js Core Variables (Memory Optimized)
-let threeScene = null;
-let threeCamera = null;
-let threeRenderer = null;
-let activeAnimContainer = null;
-let starfieldMesh = null;
-let threeMaterials = {};
-let waveGeometry = null;
-let animFrameId = null;
-let resizeTimeout = null;
-
 document.addEventListener('DOMContentLoaded', () => {
   applyUserTheme(userTheme);
-  initThreeBackground();
+  init3DCanvasEngine();
   initCustomCursor();
   initMobileNav();
   checkAdminState();
@@ -29,22 +40,12 @@ document.addEventListener('DOMContentLoaded', () => {
   loadContacts();
   loadCards();
 
-  // Pause WebGL rendering when tab is in background to save GPU & battery
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && animFrameId) {
-      cancelAnimationFrame(animFrameId);
-      animFrameId = null;
-    } else if (!document.hidden && !animFrameId && threeRenderer) {
-      startAnimationLoop();
-    }
-  });
-
   // User Light/Dark Mode Switcher
   const userThemeToggleBtn = document.getElementById('userThemeToggleBtn');
   if (userThemeToggleBtn) {
     userThemeToggleBtn.addEventListener('click', () => {
       userTheme = userTheme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('userTheme', userTheme);
+      safeSetStorage('local', 'userTheme', userTheme);
       applyUserTheme(userTheme);
     });
   }
@@ -56,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (adminToken) {
         if (confirm("You are currently in Owner Mode. Would you like to log out?")) {
           adminToken = null;
-          sessionStorage.removeItem('adminToken');
+          safeSetStorage('session', 'adminToken', null);
           checkAdminState();
         }
       } else {
@@ -259,7 +260,6 @@ function applyUserTheme(theme) {
   if (btn) {
     btn.innerHTML = theme === 'dark' ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-sun" style="color: #f59e0b;"></i>';
   }
-  updateThreeColors();
 }
 
 function applyThemePalette(palette) {
@@ -271,8 +271,6 @@ function applyThemePalette(palette) {
   });
   const el = document.getElementById(`palette-${currentPalette}`);
   if (el) el.classList.add('active-palette');
-
-  updateThreeColors();
 }
 
 function previewThemePalette(palette) {
@@ -280,9 +278,7 @@ function previewThemePalette(palette) {
 }
 
 function applyAnimationModel(model) {
-  const targetModel = model || 'octaSphere';
-  const changed = currentAnimation !== targetModel || !activeAnimContainer;
-  currentAnimation = targetModel;
+  currentAnimation = model || 'octaSphere';
 
   document.querySelectorAll('.anim-card').forEach(card => {
     card.classList.remove('active-anim');
@@ -290,9 +286,7 @@ function applyAnimationModel(model) {
   const el = document.getElementById(`anim-${currentAnimation}`);
   if (el) el.classList.add('active-anim');
 
-  if (changed && threeScene) {
-    build3DAnimation(currentAnimation);
-  }
+  buildActive3DGeometry(currentAnimation);
 }
 
 function previewAnimation(model) {
@@ -362,462 +356,473 @@ window.previewThemePalette = previewThemePalette;
 window.previewAnimation = previewAnimation;
 
 /* ==========================================================================
-   VRAM-SAFE & CRASH-PROOF 3D ENGINE (THREE.JS)
+   ZERO-WEBGL 3D MATHEMATICAL PROJECTION ENGINE (100% CRASH-PROOF)
    ========================================================================== */
-let mouseX = 0, mouseY = 0, targetX = 0, targetY = 0;
-let threeClock = null;
+let ctx2D = null;
+let canvasWidth = 0;
+let canvasHeight = 0;
+let modelData = { groups: [], stars: [] };
+let mouseParallaxX = 0, mouseParallaxY = 0;
+let smoothMouseX = 0, smoothMouseY = 0;
 
-function getDeviceLayoutMetrics() {
-  const w = window.innerWidth;
-  if (w < 480) {
-    return { camZ: 35, scale: 0.68, offsetX: 0, offsetY: 1.4, isMobile: true };
-  } else if (w < 768) {
-    return { camZ: 31, scale: 0.78, offsetX: 0, offsetY: 1.0, isMobile: true };
-  } else if (w < 1080) {
-    return { camZ: 27, scale: 0.88, offsetX: 3.2, offsetY: 0.8, isMobile: false };
-  } else {
-    return { camZ: 24, scale: 1.0, offsetX: 5.8, offsetY: 0.6, isMobile: false };
+const PALETTE_COLORS = {
+  dark: {
+    cyan:    { primary: '56, 189, 248',  secondary: '129, 140, 248' },
+    violet:  { primary: '192, 132, 252', secondary: '244, 114, 182' },
+    emerald: { primary: '52, 211, 153',  secondary: '56, 189, 248' },
+    crimson: { primary: '251, 113, 133', secondary: '251, 146, 60' },
+    amber:   { primary: '251, 191, 36',  secondary: '249, 115, 22' }
+  },
+  light: {
+    cyan:    { primary: '2, 132, 199',   secondary: '67, 56, 202' },
+    violet:  { primary: '109, 40, 217',  secondary: '190, 24, 93' },
+    emerald: { primary: '4, 120, 87',    secondary: '14, 116, 144' },
+    crimson: { primary: '190, 18, 60',   secondary: '194, 65, 12' },
+    amber:   { primary: '180, 83, 9',    secondary: '159, 18, 57' }
   }
-}
+};
 
-function updateResponsive3DLayout() {
-  if (!threeCamera || !threeRenderer) return;
-  const metrics = getDeviceLayoutMetrics();
-  const w = Math.max(1, window.innerWidth);
-  const h = Math.max(1, window.innerHeight);
+function init3DCanvasEngine() {
+  const oldCanvas = document.getElementById('threeCanvas');
+  if (!oldCanvas) return;
 
-  threeCamera.aspect = w / h;
-  threeCamera.position.z = metrics.camZ;
-  threeCamera.updateProjectionMatrix();
+  // Replace canvas element to guarantee a fresh 2D context unpolluted by any prior WebGL calls
+  const canvas = oldCanvas.cloneNode(false);
+  oldCanvas.parentNode.replaceChild(canvas, oldCanvas);
 
-  threeRenderer.setSize(w, h, false);
+  ctx2D = canvas.getContext('2d');
+  if (!ctx2D) return;
 
-  if (activeAnimContainer) {
-    activeAnimContainer.scale.set(metrics.scale, metrics.scale, metrics.scale);
-    if (currentAnimation === 'quantumWave') {
-      activeAnimContainer.position.x = 0;
-      activeAnimContainer.position.y = metrics.isMobile ? -3.5 : -1.5;
-    } else {
-      activeAnimContainer.position.x = metrics.offsetX;
-      activeAnimContainer.position.y = metrics.offsetY;
-    }
+  function resizeCanvas() {
+    canvasWidth = window.innerWidth;
+    canvasHeight = window.innerHeight;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
   }
-}
+  resizeCanvas();
 
-function initThreeBackground() {
-  const canvas = document.getElementById('threeCanvas');
-  if (!canvas || typeof THREE === 'undefined') return;
-
-  // Handle WebGL Context Loss & Auto-Recovery
-  canvas.addEventListener('webglcontextlost', (e) => {
-    e.preventDefault();
-    if (animFrameId) {
-      cancelAnimationFrame(animFrameId);
-      animFrameId = null;
-    }
-    console.warn("WebGL Context Lost — pausing 3D loop for recovery.");
-  }, false);
-
-  canvas.addEventListener('webglcontextrestored', () => {
-    console.log("WebGL Context Restored — rebuilding 3D scene.");
-    setupSceneAndRenderer(canvas);
-  }, false);
-
-  setupSceneAndRenderer(canvas);
+  window.addEventListener('resize', resizeCanvas);
 
   window.addEventListener('mousemove', (e) => {
-    mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
-    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+    mouseParallaxX = (e.clientX / window.innerWidth - 0.5) * 2;
+    mouseParallaxY = (e.clientY / window.innerHeight - 0.5) * 2;
   }, { passive: true });
 
   window.addEventListener('touchmove', (e) => {
     if (e.touches.length > 0) {
-      mouseX = (e.touches[0].clientX / window.innerWidth - 0.5) * 1.4;
-      mouseY = (e.touches[0].clientY / window.innerHeight - 0.5) * 1.4;
+      mouseParallaxX = (e.touches[0].clientX / window.innerWidth - 0.5) * 1.5;
+      mouseParallaxY = (e.touches[0].clientY / window.innerHeight - 0.5) * 1.5;
     }
   }, { passive: true });
 
-  // Debounced resize prevents D3D11 Texture2D Out-Of-Memory crashes
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(updateResponsive3DLayout, 150);
-  });
+  // Generate 3D Starfield
+  modelData.stars = [];
+  for (let i = 0; i < 160; i++) {
+    modelData.stars.push({
+      x: (Math.random() - 0.5) * 70,
+      y: (Math.random() - 0.5) * 70,
+      z: (Math.random() - 0.5) * 40,
+      size: Math.random() * 1.6 + 0.6
+    });
+  }
+
+  buildActive3DGeometry(currentAnimation);
+
+  const startTime = performance.now();
+  function renderLoop(now) {
+    requestAnimationFrame(renderLoop);
+    if (document.hidden || !ctx2D) return;
+
+    const t = (now - startTime) * 0.001;
+    draw3DScene(t);
+  }
+  requestAnimationFrame(renderLoop);
 }
 
-function setupSceneAndRenderer(canvas) {
-  try {
-    const metrics = getDeviceLayoutMetrics();
-    threeScene = new THREE.Scene();
-    threeCamera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 1000);
-    threeCamera.position.z = metrics.camZ;
-
-    // Lightweight WebGL configuration: depth:false & stencil:false saves >75% GPU Texture2D VRAM
-    threeRenderer = new THREE.WebGLRenderer({
-      canvas: canvas,
-      alpha: true,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      powerPreference: 'default',
-      precision: 'mediump'
-    });
-    threeRenderer.setPixelRatio(1); // Locked to 1x to prevent 4K D3D11 Texture2D exhaustion
-    threeRenderer.setSize(window.innerWidth, window.innerHeight, false);
-
-    // Reusable Shared Materials (Never duplicated)
-    threeMaterials.mainWire = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16 });
-    threeMaterials.secondaryWire = new THREE.LineBasicMaterial({ color: 0x818cf8, transparent: true, opacity: 0.20 });
-    threeMaterials.vertex = new THREE.PointsMaterial({
-      color: 0x38bdf8,
-      size: 0.34,
-      transparent: true,
-      opacity: 0.50,
-      blending: THREE.AdditiveBlending
-    });
-    threeMaterials.particleMat = new THREE.PointsMaterial({
-      size: 0.14,
-      color: 0x38bdf8,
-      transparent: true,
-      opacity: 0.25,
-      blending: THREE.AdditiveBlending
-    });
-
-    // Ambient Cosmic Dust Particles
-    const particleCount = metrics.isMobile ? 250 : 450;
-    const pPositions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-      const i3 = i * 3;
-      pPositions[i3] = (Math.random() - 0.5) * 85;
-      pPositions[i3 + 1] = (Math.random() - 0.5) * 85;
-      pPositions[i3 + 2] = (Math.random() - 0.5) * 60;
-    }
-    const particleGeo = new THREE.BufferGeometry();
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
-    starfieldMesh = new THREE.Points(particleGeo, threeMaterials.particleMat);
-    threeScene.add(starfieldMesh);
-
-    threeClock = new THREE.Clock();
-    build3DAnimation(currentAnimation);
-    startAnimationLoop();
-  } catch (err) {
-    console.warn("WebGL initialization skipped due to hardware limits:", err);
-  }
-}
-
-function startAnimationLoop() {
-  if (animFrameId) cancelAnimationFrame(animFrameId);
-
-  function animate() {
-    animFrameId = requestAnimationFrame(animate);
-    if (!threeRenderer || !threeScene || !threeCamera) return;
-
-    const elapsedTime = threeClock ? threeClock.getElapsedTime() : 0;
-    const m = getDeviceLayoutMetrics();
-
-    if (activeAnimContainer) {
-      if (currentAnimation === 'octaSphere') {
-        activeAnimContainer.rotation.y = elapsedTime * 0.065;
-        activeAnimContainer.rotation.x = elapsedTime * 0.03;
-
-        if (activeAnimContainer.userData.innerOcta) {
-          activeAnimContainer.userData.innerOcta.rotation.y = -elapsedTime * 0.1;
-          activeAnimContainer.userData.innerOcta.rotation.z = elapsedTime * 0.06;
-        }
-        const pulse = m.scale * (1 + Math.sin(elapsedTime * 1.4) * 0.025);
-        activeAnimContainer.scale.set(pulse, pulse, pulse);
-      } 
-      else if (currentAnimation === 'cyberTorus') {
-        const { torus1, torus2, knot } = activeAnimContainer.userData;
-        if (torus1) {
-          torus1.rotation.x = elapsedTime * 0.07;
-          torus1.rotation.y = elapsedTime * 0.08;
-        }
-        if (torus2) {
-          torus2.rotation.x = -elapsedTime * 0.06;
-          torus2.rotation.z = elapsedTime * 0.09;
-        }
-        if (knot) {
-          knot.rotation.y = elapsedTime * 0.11;
-          knot.rotation.z = -elapsedTime * 0.07;
-        }
-      } 
-      else if (currentAnimation === 'quantumWave') {
-        if (waveGeometry) {
-          const pos = waveGeometry.attributes.position;
-          const count = pos.count;
-          for (let i = 0; i < count; i++) {
-            const x = pos.getX(i);
-            const y = pos.getY(i);
-            const z = Math.sin(x * 0.24 + elapsedTime * 1.5) * Math.cos(y * 0.24 + elapsedTime * 1.2) * 2.2;
-            pos.setZ(i, z);
-          }
-          pos.needsUpdate = true;
-        }
-        activeAnimContainer.rotation.z = elapsedTime * 0.015;
-      } 
-      else if (currentAnimation === 'hyperCube') {
-        const { outerCube, innerCube, core } = activeAnimContainer.userData;
-        if (outerCube) {
-          outerCube.rotation.x = elapsedTime * 0.055;
-          outerCube.rotation.y = elapsedTime * 0.075;
-        }
-        if (innerCube) {
-          innerCube.rotation.x = -elapsedTime * 0.09;
-          innerCube.rotation.y = -elapsedTime * 0.08;
-        }
-        if (core) {
-          core.rotation.y = elapsedTime * 0.14;
-        }
-      }
-      else if (currentAnimation === 'dnaHelix') {
-        const { helixGroup } = activeAnimContainer.userData;
-        if (helixGroup) {
-          helixGroup.rotation.y = elapsedTime * 0.18;
-        }
-        activeAnimContainer.position.y = m.offsetY + Math.sin(elapsedTime * 1.2) * 0.45;
-      }
-      else if (currentAnimation === 'orbitalRings') {
-        const { ring1, ring2, ring3, coreGem } = activeAnimContainer.userData;
-        if (ring1) {
-          ring1.rotation.x = elapsedTime * 0.12;
-          ring1.rotation.y = elapsedTime * 0.06;
-        }
-        if (ring2) {
-          ring2.rotation.y = -elapsedTime * 0.14;
-          ring2.rotation.z = elapsedTime * 0.08;
-        }
-        if (ring3) {
-          ring3.rotation.x = elapsedTime * 0.07;
-          ring3.rotation.z = -elapsedTime * 0.15;
-        }
-        if (coreGem) {
-          coreGem.rotation.y = elapsedTime * 0.22;
-          coreGem.rotation.x = -elapsedTime * 0.12;
-        }
-      }
-    }
-
-    if (starfieldMesh) {
-      starfieldMesh.rotation.y = elapsedTime * 0.008;
-    }
-
-    targetX += (mouseX * 2.5 - targetX) * 0.045;
-    targetY += (-mouseY * 2.5 - targetY) * 0.045;
-    threeCamera.position.x = targetX;
-    threeCamera.position.y = targetY;
-    threeCamera.lookAt(threeScene.position);
-
-    threeRenderer.render(threeScene, threeCamera);
-  }
-
-  animate();
-}
-
-/* Helper to create wireframe and immediately free temporary source geometry */
-function createWireframeSegment(sourceGeo, material, keepSourceForPoints = false) {
-  const wireGeo = new THREE.WireframeGeometry(sourceGeo);
-  const lineSeg = new THREE.LineSegments(wireGeo, material);
-  if (!keepSourceForPoints) {
-    sourceGeo.dispose();
-  }
-  return lineSeg;
-}
-
-/* Build All 6 Distinct 3D Animation Models (Zero Memory Leak) */
-function build3DAnimation(mode) {
-  if (!threeScene) return;
-
-  // Dispose every geometry in old container to keep GPU VRAM clean
-  if (activeAnimContainer) {
-    threeScene.remove(activeAnimContainer);
-    activeAnimContainer.traverse(obj => {
-      if (obj.geometry) {
-        obj.geometry.dispose();
-      }
-    });
-    activeAnimContainer = null;
-  }
-  if (waveGeometry) {
-    waveGeometry.dispose();
-    waveGeometry = null;
-  }
-
-  activeAnimContainer = new THREE.Group();
-  const { mainWire, secondaryWire, vertex } = threeMaterials;
+/* Mathematical 3D Geometry Builders for All 6 Animations */
+function buildActive3DGeometry(mode) {
+  modelData.groups = [];
 
   // 1. OCTA-GEODESIC SHIELD
   if (mode === 'octaSphere') {
-    const sphereGeo = new THREE.IcosahedronGeometry(10.0, 2);
-    const wireframeSphere = createWireframeSegment(sphereGeo, mainWire, true);
-    activeAnimContainer.add(wireframeSphere);
-
-    const vertexPoints = new THREE.Points(sphereGeo, vertex);
-    activeAnimContainer.add(vertexPoints);
-
-    const innerGeo = new THREE.OctahedronGeometry(5.8, 1);
-    const innerOcta = createWireframeSegment(innerGeo, secondaryWire, false);
-    activeAnimContainer.add(innerOcta);
-
-    activeAnimContainer.userData = { wireframeSphere, vertexPoints, innerOcta };
+    const outer = createGeodesicSphere(10.0, 2);
+    const inner = createOctahedron(5.6);
+    modelData.groups.push(
+      { vertices: outer.vertices, edges: outer.edges, showNodes: true, isPrimary: true, role: 'outerSphere' },
+      { vertices: inner.vertices, edges: inner.edges, showNodes: false, isPrimary: false, role: 'innerCore' }
+    );
   }
 
   // 2. CYBER TORUS VORTEX
   else if (mode === 'cyberTorus') {
-    const t1Geo = new THREE.TorusGeometry(9.8, 2.1, 12, 48);
-    const torus1 = createWireframeSegment(t1Geo, mainWire, false);
-    activeAnimContainer.add(torus1);
-
-    const t2Geo = new THREE.TorusGeometry(6.8, 1.5, 10, 40);
-    const torus2 = createWireframeSegment(t2Geo, secondaryWire, false);
-    activeAnimContainer.add(torus2);
-
-    const knotGeo = new THREE.TorusKnotGeometry(3.8, 0.65, 48, 8);
-    const knot = createWireframeSegment(knotGeo, mainWire, false);
-    activeAnimContainer.add(knot);
-
-    activeAnimContainer.userData = { torus1, torus2, knot };
+    const t1 = createTorusMesh(9.5, 2.1, 14, 28);
+    const t2 = createTorusMesh(6.5, 1.4, 10, 22);
+    const knot = createTorusKnot(3.6, 0.7, 72);
+    modelData.groups.push(
+      { vertices: t1.vertices, edges: t1.edges, showNodes: true, isPrimary: true, role: 'torus1' },
+      { vertices: t2.vertices, edges: t2.edges, showNodes: false, isPrimary: false, role: 'torus2' },
+      { vertices: knot.vertices, edges: knot.edges, showNodes: false, isPrimary: true, role: 'knot' }
+    );
   }
 
   // 3. QUANTUM WAVE LATTICE
   else if (mode === 'quantumWave') {
-    waveGeometry = new THREE.PlaneGeometry(40, 40, 28, 28);
-
-    const wavePoints = new THREE.Points(waveGeometry, vertex);
-    wavePoints.rotation.x = -Math.PI / 2.3;
-    activeAnimContainer.add(wavePoints);
-
-    const staticGridGeo = new THREE.PlaneGeometry(40, 40, 14, 14);
-    const waveWire = createWireframeSegment(staticGridGeo, mainWire, false);
-    waveWire.rotation.x = -Math.PI / 2.3;
-    activeAnimContainer.add(waveWire);
-
-    activeAnimContainer.userData = { wavePoints, waveWire };
+    const wave = createWaveGrid(20, 20, 34);
+    modelData.groups.push(
+      { vertices: wave.vertices, edges: wave.edges, showNodes: true, isPrimary: true, role: 'wave' }
+    );
   }
 
   // 4. 4D TESSERACT (HYPERCUBE)
   else if (mode === 'hyperCube') {
-    const size = 10.0;
-    const outerGeo = new THREE.BoxGeometry(size, size, size);
-    const outerCube = createWireframeSegment(outerGeo, mainWire, true);
-    outerCube.add(new THREE.Points(outerGeo, vertex));
-    activeAnimContainer.add(outerCube);
-
-    const innerGeo = new THREE.BoxGeometry(size * 0.56, size * 0.56, size * 0.56);
-    const innerCube = createWireframeSegment(innerGeo, secondaryWire, false);
-    activeAnimContainer.add(innerCube);
-
-    const coreGeo = new THREE.OctahedronGeometry(size * 0.28, 0);
-    const core = createWireframeSegment(coreGeo, mainWire, false);
-    activeAnimContainer.add(core);
-
-    activeAnimContainer.userData = { outerCube, innerCube, core };
+    const tesseract = createTesseractMesh(8.2, 4.4);
+    const core = createOctahedron(2.4);
+    modelData.groups.push(
+      { vertices: tesseract.vertices, edges: tesseract.outerEdges, showNodes: true, isPrimary: true, role: 'tesseractOuter' },
+      { vertices: tesseract.vertices, edges: tesseract.innerEdges, showNodes: false, isPrimary: false, role: 'tesseractInner' },
+      { vertices: core.vertices, edges: core.edges, showNodes: false, isPrimary: true, role: 'hyperCore' }
+    );
   }
 
   // 5. NEURAL DNA HELIX
   else if (mode === 'dnaHelix') {
-    const helixGroup = new THREE.Group();
-    const numRungs = 28;
-    const height = 22;
-    const radius = 4.6;
-
-    const strandPositions = [];
-    const rungVertices = [];
-
-    for (let i = 0; i < numRungs; i++) {
-      const t = i / (numRungs - 1);
-      const y = (t - 0.5) * height;
-      const angle = t * Math.PI * 3.5;
-
-      const x1 = Math.cos(angle) * radius;
-      const z1 = Math.sin(angle) * radius;
-
-      const x2 = Math.cos(angle + Math.PI) * radius;
-      const z2 = Math.sin(angle + Math.PI) * radius;
-
-      strandPositions.push(x1, y, z1, x2, y, z2);
-      rungVertices.push(x1, y, z1, x2, y, z2);
-    }
-
-    const nodesGeo = new THREE.BufferGeometry();
-    nodesGeo.setAttribute('position', new THREE.Float32BufferAttribute(strandPositions, 3));
-    const nodesPoints = new THREE.Points(nodesGeo, vertex);
-    helixGroup.add(nodesPoints);
-
-    const rungsGeo = new THREE.BufferGeometry();
-    rungsGeo.setAttribute('position', new THREE.Float32BufferAttribute(rungVertices, 3));
-    const rungsLines = new THREE.LineSegments(rungsGeo, mainWire);
-    helixGroup.add(rungsLines);
-
-    helixGroup.rotation.z = Math.PI / 7;
-    activeAnimContainer.add(helixGroup);
-    activeAnimContainer.userData = { helixGroup };
+    const dna = createDNAHelix(28, 21, 4.5);
+    modelData.groups.push(
+      { vertices: dna.vertices, edges: dna.rungs, showNodes: true, isPrimary: true, role: 'dnaMain' },
+      { vertices: dna.vertices, edges: dna.strands, showNodes: false, isPrimary: false, role: 'dnaBackbone' }
+    );
   }
 
   // 6. CELESTIAL GYRO RINGS
   else if (mode === 'orbitalRings') {
-    const r1Geo = new THREE.TorusGeometry(10.5, 0.08, 8, 64);
-    const ring1 = createWireframeSegment(r1Geo, mainWire, true);
-    ring1.add(new THREE.Points(r1Geo, vertex));
-    activeAnimContainer.add(ring1);
-
-    const r2Geo = new THREE.TorusGeometry(8.0, 0.08, 8, 56);
-    const ring2 = createWireframeSegment(r2Geo, secondaryWire, false);
-    activeAnimContainer.add(ring2);
-
-    const r3Geo = new THREE.TorusGeometry(5.5, 0.08, 8, 48);
-    const ring3 = createWireframeSegment(r3Geo, mainWire, false);
-    activeAnimContainer.add(ring3);
-
-    const coreGeo = new THREE.OctahedronGeometry(2.4, 0);
-    const coreGem = createWireframeSegment(coreGeo, secondaryWire, false);
-    activeAnimContainer.add(coreGem);
-
-    activeAnimContainer.userData = { ring1, ring2, ring3, coreGem };
+    const r1 = createRingMesh(10.4, 56);
+    const r2 = createRingMesh(7.9, 48);
+    const r3 = createRingMesh(5.5, 40);
+    const gem = createOctahedron(2.5);
+    modelData.groups.push(
+      { vertices: r1.vertices, edges: r1.edges, showNodes: true, isPrimary: true, role: 'gyro1' },
+      { vertices: r2.vertices, edges: r2.edges, showNodes: true, isPrimary: false, role: 'gyro2' },
+      { vertices: r3.vertices, edges: r3.edges, showNodes: false, isPrimary: true, role: 'gyro3' },
+      { vertices: gem.vertices, edges: gem.edges, showNodes: false, isPrimary: false, role: 'gyroGem' }
+    );
   }
-
-  threeScene.add(activeAnimContainer);
-  updateResponsive3DLayout();
-  updateThreeColors();
 }
 
-function updateThreeColors() {
-  if (!threeMaterials.mainWire) return;
+/* 3D Geometry Generators */
+function createOctahedron(r) {
+  const vertices = [
+    [r, 0, 0], [-r, 0, 0],
+    [0, r, 0], [0, -r, 0],
+    [0, 0, r], [0, 0, -r]
+  ];
+  const edges = [
+    [0, 2], [0, 3], [0, 4], [0, 5],
+    [1, 2], [1, 3], [1, 4], [1, 5],
+    [2, 4], [4, 3], [3, 5], [5, 2]
+  ];
+  return { vertices, edges };
+}
+
+function createGeodesicSphere(radius, subdivisions) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  let verts = [
+    [-1,  t,  0], [ 1,  t,  0], [-1, -t,  0], [ 1, -t,  0],
+    [ 0, -1,  t], [ 0,  1,  t], [ 0, -1, -t], [ 0,  1, -t],
+    [ t,  0, -1], [ t,  0,  1], [-t,  0, -1], [-t,  0,  1]
+  ].map(v => {
+    const len = Math.hypot(v[0], v[1], v[2]);
+    return [v[0] / len, v[1] / len, v[2] / len];
+  });
+
+  let faces = [
+    [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+    [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+    [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+    [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]
+  ];
+
+  const midCache = {};
+  function getMidpoint(i1, i2) {
+    const key = i1 < i2 ? `${i1}_${i2}` : `${i2}_${i1}`;
+    if (midCache[key] !== undefined) return midCache[key];
+    const v1 = verts[i1], v2 = verts[i2];
+    const mx = (v1[0] + v2[0]) / 2;
+    const my = (v1[1] + v2[1]) / 2;
+    const mz = (v1[2] + v2[2]) / 2;
+    const len = Math.hypot(mx, my, mz);
+    verts.push([mx / len, my / len, mz / len]);
+    const idx = verts.length - 1;
+    midCache[key] = idx;
+    return idx;
+  }
+
+  for (let s = 0; s < subdivisions; s++) {
+    const nextFaces = [];
+    for (const [a, b, c] of faces) {
+      const ab = getMidpoint(a, b);
+      const bc = getMidpoint(b, c);
+      const ca = getMidpoint(c, a);
+      nextFaces.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+    }
+    faces = nextFaces;
+  }
+
+  const vertices = verts.map(v => [v[0] * radius, v[1] * radius, v[2] * radius]);
+  const edgeSet = new Set();
+  const edges = [];
+  for (const [a, b, c] of faces) {
+    [[a, b], [b, c], [c, a]].forEach(([u, v]) => {
+      const key = u < v ? `${u}_${v}` : `${v}_${u}`;
+      if (!edgeSet.has(key)) {
+        edgeSet.add(key);
+        edges.push([u, v]);
+      }
+    });
+  }
+  return { vertices, edges };
+}
+
+function createTorusMesh(R, r, radialSegs, tubularSegs) {
+  const vertices = [];
+  const edges = [];
+  for (let i = 0; i < radialSegs; i++) {
+    const u = (i / radialSegs) * Math.PI * 2;
+    for (let j = 0; j < tubularSegs; j++) {
+      const v = (j / tubularSegs) * Math.PI * 2;
+      const x = (R + r * Math.cos(u)) * Math.cos(v);
+      const y = (R + r * Math.cos(u)) * Math.sin(v);
+      const z = r * Math.sin(u);
+      vertices.push([x, y, z]);
+
+      const curr = i * tubularSegs + j;
+      const nextJ = i * tubularSegs + ((j + 1) % tubularSegs);
+      const nextI = ((i + 1) % radialSegs) * tubularSegs + j;
+      edges.push([curr, nextJ], [curr, nextI]);
+    }
+  }
+  return { vertices, edges };
+}
+
+function createTorusKnot(R, tube, segs) {
+  const vertices = [];
+  const edges = [];
+  const p = 2, q = 3;
+  for (let i = 0; i < segs; i++) {
+    const t = (i / segs) * Math.PI * 2;
+    const r = R + tube * Math.cos(q * t);
+    const x = r * Math.cos(p * t);
+    const y = r * Math.sin(p * t);
+    const z = tube * Math.sin(q * t) * 2.2;
+    vertices.push([x, y, z]);
+    edges.push([i, (i + 1) % segs]);
+  }
+  return { vertices, edges };
+}
+
+function createWaveGrid(rows, cols, span) {
+  const vertices = [];
+  const edges = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = (c / (cols - 1) - 0.5) * span;
+      const y = (r / (rows - 1) - 0.5) * span;
+      vertices.push([x, y, 0, x, y]);
+      const idx = r * cols + c;
+      if (c < cols - 1) edges.push([idx, idx + 1]);
+      if (r < rows - 1) edges.push([idx, idx + cols]);
+    }
+  }
+  return { vertices, edges };
+}
+
+function createTesseractMesh(s1, s2) {
+  const vertices = [];
+  for (const s of [s1, s2]) {
+    for (let i = 0; i < 8; i++) {
+      vertices.push([
+        (i & 1 ? 1 : -1) * s,
+        (i & 2 ? 1 : -1) * s,
+        (i & 4 ? 1 : -1) * s
+      ]);
+    }
+  }
+  const boxEdges = [
+    [0,1],[2,3],[4,5],[6,7],
+    [0,2],[1,3],[4,6],[5,7],
+    [0,4],[1,5],[2,6],[3,7]
+  ];
+  const outerEdges = boxEdges.map(([a, b]) => [a, b]);
+  const innerEdges = boxEdges.map(([a, b]) => [a + 8, b + 8]);
+  for (let i = 0; i < 8; i++) {
+    innerEdges.push([i, i + 8]); // 4D hypercube connecting struts
+  }
+  return { vertices, outerEdges, innerEdges };
+}
+
+function createDNAHelix(rungsCount, height, radius) {
+  const vertices = [];
+  const rungs = [];
+  const strands = [];
+  for (let i = 0; i < rungsCount; i++) {
+    const t = i / (rungsCount - 1);
+    const y = (t - 0.5) * height;
+    const angle = t * Math.PI * 3.6;
+
+    vertices.push([Math.cos(angle) * radius, y, Math.sin(angle) * radius]);
+    vertices.push([Math.cos(angle + Math.PI) * radius, y, Math.sin(angle + Math.PI) * radius]);
+
+    const idx1 = i * 2;
+    const idx2 = i * 2 + 1;
+    rungs.push([idx1, idx2]);
+    if (i > 0) {
+      strands.push([idx1 - 2, idx1], [idx2 - 2, idx2]);
+    }
+  }
+  return { vertices, rungs, strands };
+}
+
+function createRingMesh(radius, segs) {
+  const vertices = [];
+  const edges = [];
+  for (let i = 0; i < segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    vertices.push([Math.cos(a) * radius, Math.sin(a) * radius, 0]);
+    edges.push([i, (i + 1) % segs]);
+  }
+  return { vertices, edges };
+}
+
+/* 3D Rotation & Projection Renderer */
+function rotate3D(x, y, z, rx, ry, rz) {
+  // Rotate X
+  let y1 = y * Math.cos(rx) - z * Math.sin(rx);
+  let z1 = y * Math.sin(rx) + z * Math.cos(rx);
+  // Rotate Y
+  let x2 = x * Math.cos(ry) + z1 * Math.sin(ry);
+  let z2 = -x * Math.sin(ry) + z1 * Math.cos(ry);
+  // Rotate Z
+  let x3 = x2 * Math.cos(rz) - y1 * Math.sin(rz);
+  let y3 = x2 * Math.sin(rz) + y1 * Math.cos(rz);
+  return [x3, y3, z2];
+}
+
+function draw3DScene(t) {
+  ctx2D.clearRect(0, 0, canvasWidth, canvasHeight);
 
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const themeColors = (isLight ? PALETTE_COLORS.light : PALETTE_COLORS.dark)[currentPalette] || PALETTE_COLORS.dark.cyan;
 
-  const darkPalettes = {
-    cyan: { primary: 0x0284c7, secondary: 0x4f46e5 },
-    violet: { primary: 0x7c3aed, secondary: 0xc026d3 },
-    emerald: { primary: 0x059669, secondary: 0x0284c7 },
-    crimson: { primary: 0xe11d48, secondary: 0xd97706 },
-    amber: { primary: 0xd97706, secondary: 0xe11d48 }
-  };
+  // Responsive metrics
+  const isMobile = canvasWidth < 768;
+  const fov = isMobile ? 28 : 24;
+  const unitScale = Math.min(canvasWidth, canvasHeight) * (isMobile ? 0.043 : 0.048);
+  const offsetX = (isMobile || currentAnimation === 'quantumWave') ? 0 : 4.8;
+  const offsetY = currentAnimation === 'quantumWave' ? 2.5 : (isMobile ? -0.8 : -0.4);
 
-  const lightPalettes = {
-    cyan: { primary: 0x0284c7, secondary: 0x4338ca },
-    violet: { primary: 0x6d28d9, secondary: 0xbe185d },
-    emerald: { primary: 0x047857, secondary: 0x0e7490 },
-    crimson: { primary: 0xbe123c, secondary: 0xc2410c },
-    amber: { primary: 0xb45309, secondary: 0x9f1239 }
-  };
+  // Smooth Mouse Parallax
+  smoothMouseX += (mouseParallaxX * 2.2 - smoothMouseX) * 0.05;
+  smoothMouseY += (mouseParallaxY * 2.2 - smoothMouseY) * 0.05;
 
-  const active = (isLight ? lightPalettes : darkPalettes)[currentPalette] || (isLight ? lightPalettes.cyan : darkPalettes.cyan);
+  const centerX = canvasWidth / 2;
+  const centerY = canvasHeight / 2;
 
-  if (threeMaterials.mainWire) {
-    threeMaterials.mainWire.color.setHex(active.primary);
-    threeMaterials.mainWire.opacity = isLight ? 0.18 : 0.16;
+  // 1. Render Ambient 3D Starfield
+  ctx2D.fillStyle = `rgba(${themeColors.primary}, ${isLight ? 0.25 : 0.32})`;
+  for (const star of modelData.stars) {
+    const [rx, ry, rz] = rotate3D(star.x, star.y, star.z, 0, t * 0.02, 0);
+    const depth = fov + rz + 18;
+    if (depth > 1) {
+      const p = fov / depth;
+      const sx = centerX + (rx - smoothMouseX * 1.2) * p * unitScale;
+      const sy = centerY + (ry - smoothMouseY * 1.2) * p * unitScale;
+      ctx2D.beginPath();
+      ctx2D.arc(sx, sy, star.size * p, 0, Math.PI * 2);
+      ctx2D.fill();
+    }
   }
-  if (threeMaterials.vertex) {
-    threeMaterials.vertex.color.setHex(active.primary);
-    threeMaterials.vertex.opacity = isLight ? 0.40 : 0.50;
-  }
-  if (threeMaterials.secondaryWire) {
-    threeMaterials.secondaryWire.color.setHex(active.secondary);
-    threeMaterials.secondaryWire.opacity = isLight ? 0.22 : 0.20;
-  }
-  if (threeMaterials.particleMat) {
-    threeMaterials.particleMat.color.setHex(active.primary);
-    threeMaterials.particleMat.opacity = isLight ? 0.22 : 0.28;
+
+  // 2. Render Active 3D Wireframe & Vertex Groups
+  for (const group of modelData.groups) {
+    let rx = 0, ry = 0, rz = 0, scaleMult = 1;
+
+    if (group.role === 'outerSphere') {
+      rx = t * 0.08; ry = t * 0.14;
+      scaleMult = 1 + Math.sin(t * 1.4) * 0.025;
+    } else if (group.role === 'innerCore') {
+      rx = -t * 0.12; ry = -t * 0.18; rz = t * 0.09;
+    } else if (group.role === 'torus1') {
+      rx = t * 0.14; ry = t * 0.16;
+    } else if (group.role === 'torus2') {
+      rx = -t * 0.12; rz = t * 0.18;
+    } else if (group.role === 'knot') {
+      ry = t * 0.22; rz = -t * 0.14;
+    } else if (group.role === 'wave') {
+      rx = 1.12; rz = t * 0.04;
+      for (const v of group.vertices) {
+        v[2] = Math.sin(v[3] * 0.28 + t * 1.6) * Math.cos(v[4] * 0.28 + t * 1.3) * 2.1;
+      }
+    } else if (group.role === 'tesseractOuter') {
+      rx = t * 0.11; ry = t * 0.15; rz = t * 0.06;
+    } else if (group.role === 'tesseractInner') {
+      rx = t * 0.11; ry = t * 0.15; rz = t * 0.06;
+    } else if (group.role === 'hyperCore') {
+      rx = -t * 0.2; ry = t * 0.25;
+    } else if (group.role === 'dnaMain' || group.role === 'dnaBackbone') {
+      ry = t * 0.28; rz = 0.42;
+    } else if (group.role === 'gyro1') {
+      rx = t * 0.22; ry = t * 0.12;
+    } else if (group.role === 'gyro2') {
+      ry = -t * 0.24; rz = t * 0.16;
+    } else if (group.role === 'gyro3') {
+      rx = t * 0.15; rz = -t * 0.26;
+    } else if (group.role === 'gyroGem') {
+      rx = -t * 0.25; ry = t * 0.32;
+    }
+
+    // Project all 3D vertices to 2D screen coordinates
+    const projected = new Array(group.vertices.length);
+    for (let i = 0; i < group.vertices.length; i++) {
+      const v = group.vertices[i];
+      const [x, y, z] = rotate3D(v[0] * scaleMult, v[1] * scaleMult, v[2] * scaleMult, rx, ry, rz);
+      const depth = fov + z + 14;
+      const p = fov / Math.max(1, depth);
+      const sx = centerX + (x + offsetX - smoothMouseX) * p * unitScale;
+      const sy = centerY + (y + offsetY - smoothMouseY) * p * unitScale;
+      projected[i] = [sx, sy, p];
+    }
+
+    // Draw Wireframe Edges (Calibrated Soft Opacity so foreground text pops)
+    const colorRGB = group.isPrimary ? themeColors.primary : themeColors.secondary;
+    const lineAlpha = isLight ? (group.isPrimary ? 0.20 : 0.24) : (group.isPrimary ? 0.17 : 0.22);
+
+    ctx2D.strokeStyle = `rgba(${colorRGB}, ${lineAlpha})`;
+    ctx2D.lineWidth = isLight ? 1.15 : 1.0;
+    ctx2D.beginPath();
+    for (let i = 0; i < group.edges.length; i++) {
+      const [u, v] = group.edges[i];
+      const p1 = projected[u];
+      const p2 = projected[v];
+      if (p1 && p2) {
+        ctx2D.moveTo(p1[0], p1[1]);
+        ctx2D.lineTo(p2[0], p2[1]);
+      }
+    }
+    ctx2D.stroke();
+
+    // Draw Glowing Vertex Nodes
+    if (group.showNodes) {
+      const nodeAlpha = isLight ? 0.42 : 0.52;
+      ctx2D.fillStyle = `rgba(${colorRGB}, ${nodeAlpha})`;
+      for (let i = 0; i < projected.length; i++) {
+        // On dense torus mesh, draw every 2nd node for clean executive look
+        if (group.role === 'torus1' && i % 2 !== 0) continue;
+        const pt = projected[i];
+        const radius = Math.max(1.2, 2.4 * pt[2]);
+        ctx2D.beginPath();
+        ctx2D.arc(pt[0], pt[1], radius, 0, Math.PI * 2);
+        ctx2D.fill();
+      }
+    }
   }
 }
 
@@ -905,7 +910,7 @@ function handleAuthFailure(response) {
   if (response.status === 403 || response.status === 401) {
     alert("Session expired or unauthorized. Please re-enter your Owner Password.");
     adminToken = null;
-    sessionStorage.removeItem('adminToken');
+    safeSetStorage('session', 'adminToken', null);
     checkAdminState();
     openAdminModal();
   } else {
@@ -1434,7 +1439,7 @@ async function authenticateAdmin() {
     const data = await res.json();
     if (data.success) {
       adminToken = data.token;
-      sessionStorage.setItem('adminToken', adminToken);
+      safeSetStorage('session', 'adminToken', adminToken);
       checkAdminState();
       closeAdminModal();
       loadMessages();
