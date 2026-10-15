@@ -21,8 +21,8 @@ function safeSetStorage(type, key, value) {
 }
 
 let adminToken = safeGetStorage('session', 'adminToken', null);
-let currentPalette = 'cyan';
-let currentAnimation = 'octaSphere'; // 'octaSphere', 'cyberTorus', 'quantumWave', 'hyperCube', 'dnaHelix', 'orbitalRings'
+let currentPalette = safeGetStorage('local', 'themePalette', 'cyan');
+let currentAnimation = safeGetStorage('local', 'animationMode', 'octaSphere');
 let userTheme = safeGetStorage('local', 'userTheme', 'dark');
 
 let portfolioCards = [];
@@ -32,6 +32,7 @@ let activeGalleryMediaList = [];
 
 document.addEventListener('DOMContentLoaded', () => {
   applyUserTheme(userTheme);
+  applyThemePalette(currentPalette);
   init3DCanvasEngine();
   initCustomCursor();
   initMobileNav();
@@ -265,12 +266,20 @@ function applyUserTheme(theme) {
 function applyThemePalette(palette) {
   currentPalette = palette || 'cyan';
   document.documentElement.setAttribute('data-palette', currentPalette);
+  safeSetStorage('local', 'themePalette', currentPalette);
 
   document.querySelectorAll('.palette-card').forEach(card => {
     card.classList.remove('active-palette');
+    const pill = card.querySelector('.select-pill');
+    if (pill) pill.innerText = 'Select';
   });
+
   const el = document.getElementById(`palette-${currentPalette}`);
-  if (el) el.classList.add('active-palette');
+  if (el) {
+    el.classList.add('active-palette');
+    const pill = el.querySelector('.select-pill');
+    if (pill) pill.innerText = 'Active ✓';
+  }
 }
 
 function previewThemePalette(palette) {
@@ -279,12 +288,20 @@ function previewThemePalette(palette) {
 
 function applyAnimationModel(model) {
   currentAnimation = model || 'octaSphere';
+  safeSetStorage('local', 'animationMode', currentAnimation);
 
   document.querySelectorAll('.anim-card').forEach(card => {
     card.classList.remove('active-anim');
+    const pill = card.querySelector('.select-pill');
+    if (pill) pill.innerText = 'Select';
   });
+
   const el = document.getElementById(`anim-${currentAnimation}`);
-  if (el) el.classList.add('active-anim');
+  if (el) {
+    el.classList.add('active-anim');
+    const pill = el.querySelector('.select-pill');
+    if (pill) pill.innerText = 'Active ✓';
+  }
 
   buildActive3DGeometry(currentAnimation);
 }
@@ -297,14 +314,8 @@ function openThemeStudioModal() {
   if (!ensureAdminUnlocked()) return;
   const modal = document.getElementById('themeStudioModal');
   if (modal) {
-    document.querySelectorAll('.palette-card').forEach(c => c.classList.remove('active-palette'));
-    const pCard = document.getElementById(`palette-${currentPalette}`);
-    if (pCard) pCard.classList.add('active-palette');
-
-    document.querySelectorAll('.anim-card').forEach(c => c.classList.remove('active-anim'));
-    const aCard = document.getElementById(`anim-${currentAnimation}`);
-    if (aCard) aCard.classList.add('active-anim');
-
+    applyThemePalette(currentPalette);
+    applyAnimationModel(currentAnimation);
     modal.classList.add('show-modal');
     modal.style.display = 'flex';
   }
@@ -356,7 +367,7 @@ window.previewThemePalette = previewThemePalette;
 window.previewAnimation = previewAnimation;
 
 /* ==========================================================================
-   ZERO-WEBGL 3D MATHEMATICAL PROJECTION ENGINE (100% CRASH-PROOF)
+   ZERO-WEBGL 3D MATHEMATICAL PROJECTION ENGINE (100% CRASH-PROOF & FIXED)
    ========================================================================== */
 let ctx2D = null;
 let canvasWidth = 0;
@@ -386,8 +397,9 @@ function init3DCanvasEngine() {
   const oldCanvas = document.getElementById('threeCanvas');
   if (!oldCanvas) return;
 
-  // Replace canvas element to guarantee a fresh 2D context unpolluted by any prior WebGL calls
   const canvas = oldCanvas.cloneNode(false);
+  // Enforce fixed background positioning so canvas never pushes navbar or content down
+  canvas.style.cssText = 'position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: -2 !important; pointer-events: none !important; display: block !important;';
   oldCanvas.parentNode.replaceChild(canvas, oldCanvas);
 
   ctx2D = canvas.getContext('2d');
@@ -415,7 +427,6 @@ function init3DCanvasEngine() {
     }
   }, { passive: true });
 
-  // Generate 3D Starfield
   modelData.stars = [];
   for (let i = 0; i < 160; i++) {
     modelData.stars.push({
@@ -443,7 +454,6 @@ function init3DCanvasEngine() {
 function buildActive3DGeometry(mode) {
   modelData.groups = [];
 
-  // 1. OCTA-GEODESIC SHIELD
   if (mode === 'octaSphere') {
     const outer = createGeodesicSphere(10.0, 2);
     const inner = createOctahedron(5.6);
@@ -451,10 +461,7 @@ function buildActive3DGeometry(mode) {
       { vertices: outer.vertices, edges: outer.edges, showNodes: true, isPrimary: true, role: 'outerSphere' },
       { vertices: inner.vertices, edges: inner.edges, showNodes: false, isPrimary: false, role: 'innerCore' }
     );
-  }
-
-  // 2. CYBER TORUS VORTEX
-  else if (mode === 'cyberTorus') {
+  } else if (mode === 'cyberTorus') {
     const t1 = createTorusMesh(9.5, 2.1, 14, 28);
     const t2 = createTorusMesh(6.5, 1.4, 10, 22);
     const knot = createTorusKnot(3.6, 0.7, 72);
@@ -463,18 +470,12 @@ function buildActive3DGeometry(mode) {
       { vertices: t2.vertices, edges: t2.edges, showNodes: false, isPrimary: false, role: 'torus2' },
       { vertices: knot.vertices, edges: knot.edges, showNodes: false, isPrimary: true, role: 'knot' }
     );
-  }
-
-  // 3. QUANTUM WAVE LATTICE
-  else if (mode === 'quantumWave') {
+  } else if (mode === 'quantumWave') {
     const wave = createWaveGrid(20, 20, 34);
     modelData.groups.push(
       { vertices: wave.vertices, edges: wave.edges, showNodes: true, isPrimary: true, role: 'wave' }
     );
-  }
-
-  // 4. 4D TESSERACT (HYPERCUBE)
-  else if (mode === 'hyperCube') {
+  } else if (mode === 'hyperCube') {
     const tesseract = createTesseractMesh(8.2, 4.4);
     const core = createOctahedron(2.4);
     modelData.groups.push(
@@ -482,19 +483,13 @@ function buildActive3DGeometry(mode) {
       { vertices: tesseract.vertices, edges: tesseract.innerEdges, showNodes: false, isPrimary: false, role: 'tesseractInner' },
       { vertices: core.vertices, edges: core.edges, showNodes: false, isPrimary: true, role: 'hyperCore' }
     );
-  }
-
-  // 5. NEURAL DNA HELIX
-  else if (mode === 'dnaHelix') {
+  } else if (mode === 'dnaHelix') {
     const dna = createDNAHelix(28, 21, 4.5);
     modelData.groups.push(
       { vertices: dna.vertices, edges: dna.rungs, showNodes: true, isPrimary: true, role: 'dnaMain' },
       { vertices: dna.vertices, edges: dna.strands, showNodes: false, isPrimary: false, role: 'dnaBackbone' }
     );
-  }
-
-  // 6. CELESTIAL GYRO RINGS
-  else if (mode === 'orbitalRings') {
+  } else if (mode === 'orbitalRings') {
     const r1 = createRingMesh(10.4, 56);
     const r2 = createRingMesh(7.9, 48);
     const r3 = createRingMesh(5.5, 40);
@@ -508,7 +503,6 @@ function buildActive3DGeometry(mode) {
   }
 }
 
-/* 3D Geometry Generators */
 function createOctahedron(r) {
   const vertices = [
     [r, 0, 0], [-r, 0, 0],
@@ -654,7 +648,7 @@ function createTesseractMesh(s1, s2) {
   const outerEdges = boxEdges.map(([a, b]) => [a, b]);
   const innerEdges = boxEdges.map(([a, b]) => [a + 8, b + 8]);
   for (let i = 0; i < 8; i++) {
-    innerEdges.push([i, i + 8]); // 4D hypercube connecting struts
+    innerEdges.push([i, i + 8]);
   }
   return { vertices, outerEdges, innerEdges };
 }
@@ -692,15 +686,11 @@ function createRingMesh(radius, segs) {
   return { vertices, edges };
 }
 
-/* 3D Rotation & Projection Renderer */
 function rotate3D(x, y, z, rx, ry, rz) {
-  // Rotate X
   let y1 = y * Math.cos(rx) - z * Math.sin(rx);
   let z1 = y * Math.sin(rx) + z * Math.cos(rx);
-  // Rotate Y
   let x2 = x * Math.cos(ry) + z1 * Math.sin(ry);
   let z2 = -x * Math.sin(ry) + z1 * Math.cos(ry);
-  // Rotate Z
   let x3 = x2 * Math.cos(rz) - y1 * Math.sin(rz);
   let y3 = x2 * Math.sin(rz) + y1 * Math.cos(rz);
   return [x3, y3, z2];
@@ -712,21 +702,19 @@ function draw3DScene(t) {
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
   const themeColors = (isLight ? PALETTE_COLORS.light : PALETTE_COLORS.dark)[currentPalette] || PALETTE_COLORS.dark.cyan;
 
-  // Responsive metrics
   const isMobile = canvasWidth < 768;
   const fov = isMobile ? 28 : 24;
   const unitScale = Math.min(canvasWidth, canvasHeight) * (isMobile ? 0.043 : 0.048);
   const offsetX = (isMobile || currentAnimation === 'quantumWave') ? 0 : 4.8;
   const offsetY = currentAnimation === 'quantumWave' ? 2.5 : (isMobile ? -0.8 : -0.4);
 
-  // Smooth Mouse Parallax
   smoothMouseX += (mouseParallaxX * 2.2 - smoothMouseX) * 0.05;
   smoothMouseY += (mouseParallaxY * 2.2 - smoothMouseY) * 0.05;
 
   const centerX = canvasWidth / 2;
   const centerY = canvasHeight / 2;
 
-  // 1. Render Ambient 3D Starfield
+  // 1. Ambient 3D Starfield
   ctx2D.fillStyle = `rgba(${themeColors.primary}, ${isLight ? 0.25 : 0.32})`;
   for (const star of modelData.stars) {
     const [rx, ry, rz] = rotate3D(star.x, star.y, star.z, 0, t * 0.02, 0);
@@ -741,7 +729,7 @@ function draw3DScene(t) {
     }
   }
 
-  // 2. Render Active 3D Wireframe & Vertex Groups
+  // 2. Active 3D Wireframe & Vertex Groups
   for (const group of modelData.groups) {
     let rx = 0, ry = 0, rz = 0, scaleMult = 1;
 
@@ -761,9 +749,7 @@ function draw3DScene(t) {
       for (const v of group.vertices) {
         v[2] = Math.sin(v[3] * 0.28 + t * 1.6) * Math.cos(v[4] * 0.28 + t * 1.3) * 2.1;
       }
-    } else if (group.role === 'tesseractOuter') {
-      rx = t * 0.11; ry = t * 0.15; rz = t * 0.06;
-    } else if (group.role === 'tesseractInner') {
+    } else if (group.role === 'tesseractOuter' || group.role === 'tesseractInner') {
       rx = t * 0.11; ry = t * 0.15; rz = t * 0.06;
     } else if (group.role === 'hyperCore') {
       rx = -t * 0.2; ry = t * 0.25;
@@ -779,7 +765,6 @@ function draw3DScene(t) {
       rx = -t * 0.25; ry = t * 0.32;
     }
 
-    // Project all 3D vertices to 2D screen coordinates
     const projected = new Array(group.vertices.length);
     for (let i = 0; i < group.vertices.length; i++) {
       const v = group.vertices[i];
@@ -791,7 +776,6 @@ function draw3DScene(t) {
       projected[i] = [sx, sy, p];
     }
 
-    // Draw Wireframe Edges (Calibrated Soft Opacity so foreground text pops)
     const colorRGB = group.isPrimary ? themeColors.primary : themeColors.secondary;
     const lineAlpha = isLight ? (group.isPrimary ? 0.20 : 0.24) : (group.isPrimary ? 0.17 : 0.22);
 
@@ -809,12 +793,10 @@ function draw3DScene(t) {
     }
     ctx2D.stroke();
 
-    // Draw Glowing Vertex Nodes
     if (group.showNodes) {
       const nodeAlpha = isLight ? 0.42 : 0.52;
       ctx2D.fillStyle = `rgba(${colorRGB}, ${nodeAlpha})`;
       for (let i = 0; i < projected.length; i++) {
-        // On dense torus mesh, draw every 2nd node for clean executive look
         if (group.role === 'torus1' && i % 2 !== 0) continue;
         const pt = projected[i];
         const radius = Math.max(1.2, 2.4 * pt[2]);
@@ -1093,7 +1075,7 @@ function openMessagesModal() {
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="message-date">${dateStr}</span>
-            <button class="chip-btn-icon delete-btn" title="Delete Message" onclick="deleteMessage('${msg._id}')">
+            <button type="button" class="chip-btn-icon delete-btn" title="Delete Message" onclick="deleteMessage('${msg._id}')">
               <i class="fa-solid fa-trash"></i>
             </button>
           </div>
