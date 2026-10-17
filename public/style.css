@@ -228,7 +228,7 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Locked Fixed Fullscreen 3D Canvas */
+/* Fixed Fullscreen 3D Background Canvas */
 .three-canvas {
   position: fixed !important;
   top: 0 !important;
@@ -257,21 +257,10 @@ body {
 }
 
 /* ==========================================================================
-   CUSTOM SMOOTH MAGNETIC CURSOR
+   CUSTOM SMOOTH MAGNETIC CURSOR (CENTER DOT INVISIBLE)
    ========================================================================== */
 .cursor-dot {
-  width: 8px;
-  height: 8px;
-  background-color: var(--accent-primary);
-  border-radius: 50%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 99999;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 10px var(--accent-primary);
-  transition: opacity 0.2s ease, transform 0.1s ease;
+  display: none !important;
 }
 
 .cursor-ring {
@@ -973,7 +962,6 @@ html[data-theme="light"] .gradient-text {
   display: block;
 }
 
-/* Interactive Select / Active Status Badge inside Studio Cards */
 .select-pill {
   font-size: 0.7rem;
   font-weight: 700;
