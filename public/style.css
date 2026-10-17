@@ -612,7 +612,7 @@ html[data-theme="light"] .gradient-text {
   white-space: nowrap;
 }
 
-/* Send Message & Dispatch Message Buttons: Frosted Glass (Zero Washed-Out Fill) */
+/* Primary Send Message & Submit Buttons (Zero Washed-Out Fill) */
 .primary-btn {
   background: rgba(11, 18, 38, 0.82) !important;
   color: #ffffff !important;
@@ -658,7 +658,7 @@ html[data-theme="light"] .gradient-text {
   transform: translate(4px, -4px);
 }
 
-/* Light Mode Primary Button (Ceramic Frosted Glass with Deep Ink Text) */
+/* Light Theme Primary Button (Ceramic Frosted Glass with Deep Ink Text) */
 html[data-theme="light"] .primary-btn {
   background: rgba(255, 255, 255, 0.92) !important;
   color: #090d16 !important;
@@ -698,6 +698,7 @@ html[data-theme="light"] .primary-btn:hover i {
   border: 1.5px solid var(--surface-border);
   backdrop-filter: blur(12px);
 }
+
 .secondary-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: var(--surface-border-hover);
@@ -709,6 +710,7 @@ html[data-theme="light"] .secondary-btn {
   color: #090d16;
   border-color: var(--surface-border);
 }
+
 html[data-theme="light"] .secondary-btn:hover {
   background: #ffffff;
   color: #090d16;
@@ -1184,13 +1186,13 @@ html[data-theme="light"] .secondary-btn:hover {
 }
 
 /* ==========================================================================
-   OWNER FLOATING BUTTON (FROSTED LIQUID GLASS HOVER)
+   OWNER FLOATING BUTTON (DARK & LIGHT THEME OPTIMIZED)
    ========================================================================== */
 .owner-floating-btn {
   position: fixed;
   bottom: clamp(16px, 3vh, 28px);
   right: clamp(16px, 3vw, 28px);
-  background: rgba(11, 18, 38, 0.7);
+  background: rgba(11, 18, 38, 0.78);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1.5px solid var(--accent-primary);
@@ -1202,23 +1204,84 @@ html[data-theme="light"] .secondary-btn:hover {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
   box-shadow: 
     inset 0 1px 1px 0 rgba(255, 255, 255, 0.15),
     0 8px 24px rgba(0, 0, 0, 0.45);
   transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.owner-floating-btn:hover {
+.owner-floating-btn .btn-text {
+  font-weight: 700;
+}
+
+/* Dark Theme Hover */
+html[data-theme="dark"] .owner-floating-btn:hover {
   transform: translateY(-3px) scale(1.04);
-  background: rgba(255, 255, 255, 0.12) !important;
+  background: rgba(255, 255, 255, 0.14) !important;
   color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
   backdrop-filter: blur(28px) saturate(210%);
   -webkit-backdrop-filter: blur(28px) saturate(210%);
   box-shadow: 
     inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.5),
     0 12px 30px -4px rgba(0, 0, 0, 0.6),
     0 0 24px var(--accent-glow);
+}
+
+/* Light Theme Styling for Owner Button */
+html[data-theme="light"] .owner-floating-btn {
+  background: rgba(255, 255, 255, 0.94) !important;
+  color: var(--accent-primary) !important;
+  border: 1.5px solid var(--accent-primary) !important;
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  box-shadow: 
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.9),
+    0 10px 25px -4px rgba(15, 23, 42, 0.18),
+    0 0 12px var(--accent-glow);
+}
+
+html[data-theme="light"] .owner-floating-btn .btn-text {
+  color: var(--accent-primary) !important;
+}
+
+html[data-theme="light"] .owner-floating-btn i {
+  color: var(--accent-primary) !important;
+}
+
+/* Light Theme Hover (Deep Carbon Text on Ceramic White Glass) */
+html[data-theme="light"] .owner-floating-btn:hover {
+  transform: translateY(-3px) scale(1.04);
+  background: #ffffff !important;
+  color: #090d16 !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 
+    inset 0 1.5px 2px 0 #ffffff,
+    0 14px 30px -4px rgba(15, 23, 42, 0.24),
+    0 0 20px var(--accent-glow);
+}
+
+html[data-theme="light"] .owner-floating-btn:hover .btn-text,
+html[data-theme="light"] .owner-floating-btn:hover i {
+  color: #090d16 !important;
+}
+
+/* When Owner Mode is Unlocked */
+.admin-mode-active .owner-floating-btn {
+  border-color: var(--accent-emerald) !important;
+  color: var(--accent-emerald) !important;
+}
+
+html[data-theme="light"].admin-mode-active .owner-floating-btn {
+  color: #059669 !important;
+  border-color: #059669 !important;
+}
+
+html[data-theme="light"].admin-mode-active .owner-floating-btn .btn-text,
+html[data-theme="light"].admin-mode-active .owner-floating-btn i {
+  color: #059669 !important;
 }
 
 .owner-floating-btn i {
