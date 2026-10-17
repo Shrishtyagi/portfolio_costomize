@@ -1145,6 +1145,13 @@ html[data-theme="light"] .gradient-text {
   color: #050814;
   box-shadow: var(--shadow-glow);
 }
+/* ==========================================================================
+   CUSTOM CURSOR (HIDDEN — RESTORES DEFAULT MOUSE ARROW)
+   ========================================================================== */
+.cursor-dot,
+.cursor-ring {
+  display: none !important;
+}
 
 /* ==========================================================================
    MODALS
