@@ -228,7 +228,7 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Fixed Fullscreen 3D Background Canvas */
+/* Locked Fixed Fullscreen 3D Canvas */
 .three-canvas {
   position: fixed !important;
   top: 0 !important;
@@ -257,39 +257,11 @@ body {
 }
 
 /* ==========================================================================
-   CUSTOM SMOOTH MAGNETIC CURSOR (CENTER DOT INVISIBLE)
+   CUSTOM CURSOR (HIDDEN — RESTORES DEFAULT NATIVE MOUSE POINTER)
    ========================================================================== */
-.cursor-dot {
-  display: none !important;
-}
-
+.cursor-dot,
 .cursor-ring {
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid var(--accent-primary);
-  border-radius: 50%;
-  position: fixed;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 99998;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 18px var(--accent-glow);
-  transition: width 0.25s ease, height 0.25s ease, border-color 0.25s ease, background 0.25s ease;
-}
-
-.cursor-ring.cursor-hover {
-  width: 60px;
-  height: 60px;
-  border-color: var(--accent-secondary);
-  background: var(--nav-glass-bg);
-  box-shadow: 0 0 25px var(--accent-glow);
-}
-
-@media (pointer: coarse) {
-  .cursor-dot, .cursor-ring {
-    display: none !important;
-  }
+  display: none !important;
 }
 
 .page-container {
@@ -404,9 +376,9 @@ body {
 }
 .nav-contact-btn::after { display: none; }
 .nav-contact-btn:hover {
-  background: var(--accent-primary) !important;
-  color: #050814 !important;
-  border-color: var(--accent-primary) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
   box-shadow: var(--shadow-glow);
 }
 
@@ -431,11 +403,25 @@ body {
   font-size: 1rem;
   transition: var(--transition-smooth);
 }
-.theme-mode-btn:hover,
-.admin-theme-btn:hover {
+
+.theme-mode-btn:hover {
   background: var(--accent-primary);
   color: #050814;
   box-shadow: var(--shadow-glow);
+  transform: translateY(-2px);
+}
+
+/* Admin Studio Button (Frosted Glass Hover) */
+.admin-theme-btn:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  box-shadow: 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.45),
+    0 8px 20px rgba(0, 0, 0, 0.5),
+    0 0 18px var(--accent-glow);
   transform: translateY(-2px);
 }
 
@@ -607,7 +593,7 @@ html[data-theme="light"] .gradient-text {
 }
 
 /* ==========================================================================
-   BUTTONS
+   BUTTONS (FROSTED GLASS EFFECT — ULTRA HIGH READABILITY)
    ========================================================================== */
 .btn {
   display: inline-flex;
@@ -617,35 +603,115 @@ html[data-theme="light"] .gradient-text {
   padding: 12px 26px;
   border-radius: var(--radius-md);
   font-size: 0.94rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.3px;
   text-decoration: none;
   cursor: pointer;
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
   transition: var(--transition-smooth);
   white-space: nowrap;
 }
 
+/* Send Message & Dispatch Message Buttons: Frosted Glass (Zero Washed-Out Fill) */
 .primary-btn {
-  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
-  color: #ffffff;
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 20px var(--accent-glow);
+  background: rgba(11, 18, 38, 0.82) !important;
+  color: #ffffff !important;
+  border: 1.5px solid var(--accent-primary) !important;
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  box-shadow: 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.25),
+    0 8px 24px -4px rgba(0, 0, 0, 0.5),
+    0 0 16px var(--accent-glow);
 }
+
+.primary-btn span {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+.primary-btn i {
+  color: var(--accent-primary);
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
 .primary-btn:hover {
-  box-shadow: 0 0 25px var(--accent-glow);
-  transform: translateY(-3px);
+  transform: translateY(-3px) scale(1.02);
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+  backdrop-filter: blur(28px) saturate(210%);
+  -webkit-backdrop-filter: blur(28px) saturate(210%);
+  box-shadow: 
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.5),
+    0 12px 30px -4px rgba(0, 0, 0, 0.6),
+    0 0 24px var(--accent-glow);
+}
+
+.primary-btn:hover i {
+  color: #ffffff;
+  transform: translateX(4px);
+  filter: drop-shadow(0 0 8px var(--accent-primary));
+}
+
+.submit-btn:hover i {
+  transform: translate(4px, -4px);
+}
+
+/* Light Mode Primary Button (Ceramic Frosted Glass with Deep Ink Text) */
+html[data-theme="light"] .primary-btn {
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: #090d16 !important;
+  border: 1.5px solid var(--accent-primary) !important;
+  box-shadow: 
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.95),
+    0 8px 20px -4px rgba(15, 23, 42, 0.15),
+    0 0 14px var(--accent-glow);
+}
+
+html[data-theme="light"] .primary-btn span {
+  color: #090d16 !important;
+}
+
+html[data-theme="light"] .primary-btn i {
+  color: var(--accent-primary);
+}
+
+html[data-theme="light"] .primary-btn:hover {
+  background: #ffffff !important;
+  color: #090d16 !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 
+    inset 0 1.5px 2px 0 #ffffff,
+    0 12px 28px -4px rgba(15, 23, 42, 0.2),
+    0 0 20px var(--accent-glow);
+}
+
+html[data-theme="light"] .primary-btn:hover i {
+  color: var(--accent-primary);
+  transform: translateX(4px);
 }
 
 .secondary-btn {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-main);
-  border-color: var(--surface-border);
+  border: 1.5px solid var(--surface-border);
   backdrop-filter: blur(12px);
 }
 .secondary-btn:hover {
   background: rgba(255, 255, 255, 0.08);
   border-color: var(--surface-border-hover);
   transform: translateY(-3px);
+}
+
+html[data-theme="light"] .secondary-btn {
+  background: rgba(255, 255, 255, 0.7);
+  color: #090d16;
+  border-color: var(--surface-border);
+}
+html[data-theme="light"] .secondary-btn:hover {
+  background: #ffffff;
+  color: #090d16;
 }
 
 /* ==========================================================================
@@ -1118,16 +1184,16 @@ html[data-theme="light"] .gradient-text {
 }
 
 /* ==========================================================================
-   OWNER FLOATING BUTTON
+   OWNER FLOATING BUTTON (FROSTED LIQUID GLASS HOVER)
    ========================================================================== */
 .owner-floating-btn {
   position: fixed;
   bottom: clamp(16px, 3vh, 28px);
   right: clamp(16px, 3vw, 28px);
-  background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--accent-primary);
+  background: rgba(11, 18, 38, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1.5px solid var(--accent-primary);
   color: var(--accent-primary);
   padding: 10px 18px;
   border-radius: var(--radius-full);
@@ -1136,21 +1202,32 @@ html[data-theme="light"] .gradient-text {
   display: flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  transition: var(--transition-smooth);
+  box-shadow: 
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.45);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 .owner-floating-btn:hover {
-  transform: translateY(-3px) scale(1.03);
-  background: var(--accent-primary);
-  color: #050814;
-  box-shadow: var(--shadow-glow);
+  transform: translateY(-3px) scale(1.04);
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(28px) saturate(210%);
+  -webkit-backdrop-filter: blur(28px) saturate(210%);
+  box-shadow: 
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.5),
+    0 12px 30px -4px rgba(0, 0, 0, 0.6),
+    0 0 24px var(--accent-glow);
 }
-/* ==========================================================================
-   CUSTOM CURSOR (HIDDEN — RESTORES DEFAULT MOUSE ARROW)
-   ========================================================================== */
-.cursor-dot,
-.cursor-ring {
-  display: none !important;
+
+.owner-floating-btn i {
+  transition: transform 0.3s ease, filter 0.3s ease;
+}
+
+.owner-floating-btn:hover i {
+  transform: rotate(15deg);
+  filter: drop-shadow(0 0 8px var(--accent-primary));
 }
 
 /* ==========================================================================
